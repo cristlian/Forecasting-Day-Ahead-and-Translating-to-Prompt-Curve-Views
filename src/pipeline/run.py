@@ -168,7 +168,9 @@ def _run_ingestion(
     """Run data ingestion step."""
     from ..ingest import fetch_day_ahead_prices, fetch_fundamentals
     
-    market = config["market"]["code"]
+    # Handle nested market config structure
+    market_config = config["market"].get("market", config["market"])
+    market = market_config["code"]
     cache_dir = paths.cache_dir()
     
     # Fetch prices

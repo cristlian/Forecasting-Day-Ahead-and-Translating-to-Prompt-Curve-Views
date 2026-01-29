@@ -178,6 +178,3 @@ def get_area_code(market: str, config: dict = None) -> str:
         return ENTSOE_AREA_CODES[market]
     
     raise ValueError(f"Unknown market code: {market}. Known codes: {list(ENTSOE_AREA_CODES.keys())}")
-        df.index = df.index.tz_convert(to_tz)
-    
-    return df

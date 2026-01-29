@@ -340,6 +340,11 @@ def fetch_solar_forecast(
     """Convenience function to fetch only solar forecast."""
     df = fetch_fundamentals(market, start_date, end_date, config, cache_dir)
     return df[["forecast_solar"]] if "forecast_solar" in df.columns else df
+
+
+def normalize_fundamentals(
+    df: pd.DataFrame,
+    timezone: str,
     schema: Dict
 ) -> pd.DataFrame:
     """
