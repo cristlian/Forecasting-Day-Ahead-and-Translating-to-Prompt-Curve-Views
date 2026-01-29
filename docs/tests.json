@@ -1,0 +1,30 @@
+{
+  "description": "Test registry for Steps 2-4 (Ingestion, QA, Features)",
+  "tests": [
+    {
+      "id": "test_config_loads",
+      "file": "tests/test_config.py",
+      "description": "Verify all config files load and validate correctly",
+      "command": "pytest tests/test_config.py -v"
+    },
+    {
+      "id": "test_schema_validation",
+      "file": "tests/test_schema.py",
+      "description": "Verify schema contract enforcement",
+      "command": "pytest tests/test_schema.py -v"
+    },
+    {
+      "id": "test_qa_gate_fails_bad_data",
+      "file": "tests/test_qa_gate.py",
+      "description": "QA gate correctly fails on synthetic bad data",
+      "command": "pytest tests/test_qa_gate.py -v"
+    },
+    {
+      "id": "test_features_no_leakage",
+      "file": "tests/test_features.py",
+      "description": "Verify feature pipeline has no look-ahead leakage",
+      "command": "pytest tests/test_features.py -v"
+    }
+  ],
+  "run_all": "pytest tests/ -v --tb=short"
+}

@@ -1,5 +1,6 @@
 # Feature Engineering Configuration
 # Defines which features to build and their parameters
+# CRITICAL: All features must avoid look-ahead bias
 
 feature_toggles:
   enable_calendar: true
@@ -7,7 +8,7 @@ feature_toggles:
   enable_rolling: true
   enable_residual_load: true
   enable_interactions: true
-  enable_fuel_spread: false  # if fuel prices unavailable
+  enable_fuel_spread: false  # fuel prices not available publicly
 
 calendar_features:
   - hour
@@ -17,33 +18,50 @@ calendar_features:
   - is_holiday
   - season
   
+# Lag features - ONLY use forecast values, not actuals
+# Minimum lag: 24h (since we're predicting D+1)
 lag_features:
   columns:
-    - day_ahead_price
-    - actual_load
-    - wind_generation
-    - solar_generation
-  lags: [1, 2, 3, 24, 48, 168]  # hours
+    - day_ahead_price      # Historical prices (OK - these are past)
+    - forecast_load        # Past load forecasts 
+    - forecast_wind        # Past wind forecasts
+    - forecast_solar       # Past solar forecasts
+  lags: [24, 48, 168]  # 1 day, 2 days, 1 week (in hours)
   
+# Rolling features - window ends at cutoff, no leakage
+# min_periods set to ensure robustness
 rolling_features:
   columns:
     - day_ahead_price
-    - actual_load
-    - residual_load
-  windows: [6, 24, 168]  # hours (6h, 1d, 1w)
+    - forecast_load
+    - forecast_residual_load  # derived feature
+  windows: [24, 168]  # 1 day, 1 week (hours)
   aggregations:
     - mean
     - std
-    - min
-    - max
+  min_periods: 12  # require at least 12 hours in window
     
+# Derived features (computed from forecasts, not actuals)
 derived_features:
-  residual_load:
-    formula: "actual_load - wind_generation - solar_generation"
-  
-  renewable_share:
-    formula: "(wind_generation + solar_generation) / actual_load"
+  forecast_residual_load:
+    formula: "forecast_load - forecast_wind - forecast_solar"
+    description: "Residual load = demand minus renewables"
     
+  forecast_renewable_share:
+    formula: "(forecast_wind + forecast_solar) / forecast_load"
+    description: "Renewable penetration ratio"
+    
+# Interaction features
 interaction_features:
   - ["hour", "day_of_week"]
-  - ["residual_load", "hour"]
+  - ["forecast_residual_load", "hour"]
+
+# Target alignment
+target:
+  column: "day_ahead_price"
+  horizon_hours: 24  # Predicting 24 hours of D+1
+  
+# Feature cutoff policy
+cutoff:
+  description: "Features must be computable BEFORE the day-ahead auction (12:00 CET)"
+  max_feature_hour_offset: 0  # No same-day features beyond what's available at cutoff

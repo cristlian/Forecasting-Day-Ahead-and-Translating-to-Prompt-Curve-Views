@@ -1,24 +1,32 @@
 """Utility functions for data ingestion."""
 
+import os
 import time
 import logging
-from typing import Callable, Any
+import hashlib
+from datetime import datetime
+from typing import Callable, Any, Optional
 from functools import wraps
+from pathlib import Path
+
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
 
-def retry_on_failure(max_attempts: int = 3, delay: float = 1.0):
+def retry_on_failure(max_attempts: int = 3, delay: float = 1.0, backoff: float = 2.0):
     """
-    Decorator to retry a function on failure.
+    Decorator to retry a function on failure with exponential backoff.
     
     Args:
         max_attempts: Maximum number of retry attempts
-        delay: Delay between retries in seconds
+        delay: Initial delay between retries in seconds
+        backoff: Multiplier for delay after each attempt
     """
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs) -> Any:
+            current_delay = delay
             for attempt in range(max_attempts):
                 try:
                     return func(*args, **kwargs)
@@ -26,78 +34,150 @@ def retry_on_failure(max_attempts: int = 3, delay: float = 1.0):
                     if attempt == max_attempts - 1:
                         logger.error(f"Failed after {max_attempts} attempts: {e}")
                         raise
-                    logger.warning(f"Attempt {attempt + 1} failed: {e}. Retrying in {delay}s...")
-                    time.sleep(delay)
+                    logger.warning(f"Attempt {attempt + 1} failed: {e}. Retrying in {current_delay:.1f}s...")
+                    time.sleep(current_delay)
+                    current_delay *= backoff
         return wrapper
     return decorator
 
 
-def cache_data(cache_dir: str, filename: str):
-    """
-    Decorator to cache fetched data to disk.
-    
-    Args:
-        cache_dir: Directory to store cached data
-        filename: Filename for cached data
-    """
-    def decorator(func: Callable) -> Callable:
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            import pandas as pd
-            from pathlib import Path
-            
-            cache_path = Path(cache_dir) / filename
-            
-            # Check if cache exists
-            if cache_path.exists():
-                logger.info(f"Loading from cache: {cache_path}")
-                return pd.read_parquet(cache_path)
-            
-            # Fetch and cache
-            logger.info(f"Cache miss, fetching data")
-            data = func(*args, **kwargs)
-            
-            cache_path.parent.mkdir(parents=True, exist_ok=True)
-            data.to_parquet(cache_path)
-            logger.info(f"Cached data to: {cache_path}")
-            
-            return data
-        return wrapper
-    return decorator
+def get_cache_path(cache_dir: Path, market: str, data_type: str, 
+                   start_date: datetime, end_date: datetime) -> Path:
+    """Generate a deterministic cache file path."""
+    # Create hash of parameters for unique filename
+    key = f"{market}_{data_type}_{start_date.date()}_{end_date.date()}"
+    filename = f"{data_type}_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.parquet"
+    return cache_dir / market / filename
 
 
-def parse_entsoe_response(response: Any) -> Any:
-    """
-    Parse ENTSO-E API response and handle common issues.
-    
-    Args:
-        response: Raw API response
-    
-    Returns:
-        Parsed data
-    """
-    # TODO: Implement ENTSO-E response parsing
-    # Handle XML/JSON formats
-    # Handle error responses
-    # Handle missing data indicators
-    raise NotImplementedError("ENTSO-E response parsing not yet implemented")
+def load_from_cache(cache_path: Path) -> Optional[pd.DataFrame]:
+    """Load data from cache if exists."""
+    if cache_path.exists():
+        logger.info(f"Loading from cache: {cache_path}")
+        return pd.read_parquet(cache_path)
+    return None
 
 
-def convert_timezone(df, from_tz: str, to_tz: str):
+def save_to_cache(df: pd.DataFrame, cache_path: Path) -> None:
+    """Save data to cache."""
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(cache_path)
+    logger.info(f"Cached data to: {cache_path}")
+
+
+def get_entsoe_api_key() -> Optional[str]:
+    """Get ENTSO-E API key from environment."""
+    key = os.environ.get("ENTSOE_API_KEY")
+    if not key:
+        logger.warning(
+            "ENTSOE_API_KEY not set. Set it via: "
+            "export ENTSOE_API_KEY='your-key' (Linux/Mac) or "
+            "$env:ENTSOE_API_KEY='your-key' (PowerShell)"
+        )
+    return key
+
+
+def to_utc(df: pd.DataFrame, source_tz: str = "Europe/Berlin") -> pd.DataFrame:
     """
-    Convert dataframe index from one timezone to another.
+    Convert DataFrame index to UTC.
     
     Args:
         df: DataFrame with datetime index
-        from_tz: Source timezone
-        to_tz: Target timezone
-    
+        source_tz: Source timezone if index is naive
+        
     Returns:
-        DataFrame with converted timezone
+        DataFrame with UTC-aware index
     """
     if df.index.tz is None:
-        df.index = df.index.tz_localize(from_tz)
-    else:
+        df.index = df.index.tz_localize(source_tz, ambiguous='infer', nonexistent='shift_forward')
+    df.index = df.index.tz_convert("UTC")
+    return df
+
+
+def handle_dst(df: pd.DataFrame, policy: dict) -> pd.DataFrame:
+    """
+    Handle DST transitions according to policy.
+    
+    Args:
+        df: DataFrame with datetime index
+        policy: Dict with 'spring_forward' and 'fall_back' keys
+        
+    Returns:
+        DataFrame with DST handled
+    """
+    # Check for duplicates (fall back - repeated hour)
+    duplicates = df.index.duplicated(keep=False)
+    if duplicates.any():
+        n_dups = duplicates.sum() // 2
+        logger.info(f"Handling {n_dups} duplicate hours (DST fall back)")
+        if policy.get("fall_back") == "average":
+            df = df.groupby(level=0).mean()
+        else:  # keep first by default
+            df = df[~df.index.duplicated(keep='first')]
+    
+    return df
+
+
+def generate_run_id(market: str, timestamp: Optional[datetime] = None) -> str:
+    """Generate a unique run ID."""
+    if timestamp is None:
+        timestamp = datetime.utcnow()
+    return f"{timestamp.strftime('%Y%m%d_%H%M%S')}_{market}"
+
+
+def ensure_hourly_frequency(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Ensure DataFrame has continuous hourly frequency.
+    
+    Fills missing hours with NaN (to be handled by QA).
+    """
+    if len(df) == 0:
+        return df
+    
+    # Create complete hourly range
+    full_range = pd.date_range(
+        start=df.index.min(),
+        end=df.index.max(),
+        freq='h',
+        tz=df.index.tz
+    )
+    
+    # Reindex to fill gaps
+    df = df.reindex(full_range)
+    df.index.name = 'timestamp'
+    
+    return df
+
+
+# ENTSO-E area codes for common markets
+ENTSOE_AREA_CODES = {
+    "DE_LU": "10Y1001A1001A82H",  # Germany-Luxembourg
+    "DE": "10Y1001A1001A83F",     # Germany (old, pre-Oct 2018)
+    "FR": "10YFR-RTE------C",     # France
+    "NL": "10YNL----------L",     # Netherlands  
+    "BE": "10YBE----------2",     # Belgium
+    "AT": "10YAT-APG------L",     # Austria
+    "CH": "10YCH-SWISSGRIDZ",     # Switzerland
+    "PL": "10YPL-AREA-----S",     # Poland
+    "ES": "10YES-REE------0",     # Spain
+    "IT_NORD": "10Y1001A1001A73I", # Italy North
+    "GB": "10YGB----------A",     # Great Britain
+}
+
+
+def get_area_code(market: str, config: dict = None) -> str:
+    """Get ENTSO-E area code for a market."""
+    # Check config first
+    if config and "market" in config:
+        code = config["market"].get("entsoe_area_code")
+        if code:
+            return code
+    
+    # Fallback to lookup
+    if market in ENTSOE_AREA_CODES:
+        return ENTSOE_AREA_CODES[market]
+    
+    raise ValueError(f"Unknown market code: {market}. Known codes: {list(ENTSOE_AREA_CODES.keys())}")
         df.index = df.index.tz_convert(to_tz)
     
     return df

@@ -6,110 +6,192 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Dict
 
+from .checks import CheckResult
+
 logger = logging.getLogger(__name__)
 
 
 def generate_qa_report(
-    checks: List,
+    results: List[CheckResult],
     output_dir: Path,
+    run_id: str,
     timestamp: datetime = None
-) -> None:
+) -> tuple[Path, Path]:
     """
     Generate QA report in JSON and Markdown formats.
     
     Args:
-        checks: List of QACheck results
+        results: List of CheckResult objects
         output_dir: Directory to save reports
-        timestamp: Timestamp for report filename
+        run_id: Unique run identifier
+        timestamp: Timestamp for report
+        
+    Returns:
+        Tuple of (json_path, md_path)
     """
     if timestamp is None:
-        timestamp = datetime.now()
+        timestamp = datetime.utcnow()
     
+    output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Generate JSON report
-    json_path = output_dir / f"qa_report_{timestamp.strftime('%Y%m%d_%H%M%S')}.json"
-    _write_json_report(checks, json_path)
+    json_path = output_dir / f"{run_id}_qa.json"
+    _write_json_report(results, json_path, timestamp, run_id)
     
     # Generate Markdown report
-    md_path = output_dir / f"qa_report_{timestamp.strftime('%Y%m%d_%H%M%S')}.md"
-    _write_md_report(checks, md_path, timestamp)
+    md_path = output_dir / f"{run_id}_qa.md"
+    _write_md_report(results, md_path, timestamp, run_id)
     
     logger.info(f"QA reports saved to {output_dir}")
+    
+    return json_path, md_path
 
 
-def _write_json_report(checks: List, filepath: Path) -> None:
+def _write_json_report(
+    results: List[CheckResult],
+    filepath: Path,
+    timestamp: datetime,
+    run_id: str
+) -> None:
     """Write QA report as JSON."""
     report = {
-        "timestamp": datetime.now().isoformat(),
+        "run_id": run_id,
+        "timestamp": timestamp.isoformat(),
+        "overall_pass": all(r.passed for r in results),
+        "summary": {
+            "total_checks": len(results),
+            "passed": sum(1 for r in results if r.passed),
+            "failed": sum(1 for r in results if not r.passed),
+            "total_errors": sum(len(r.errors) for r in results),
+            "total_warnings": sum(len(r.warnings) for r in results),
+        },
         "checks": [
             {
-                "name": check.name,
-                "passed": check.passed,
-                "errors": check.errors,
-                "warnings": check.warnings,
+                "name": r.name,
+                "passed": r.passed,
+                "errors": r.errors,
+                "warnings": r.warnings,
+                "metrics": r.metrics,
             }
-            for check in checks
+            for r in results
         ],
-        "overall_pass": all(check.passed for check in checks),
     }
     
     with open(filepath, 'w') as f:
-        json.dump(report, f, indent=2)
+        json.dump(report, f, indent=2, default=str)
 
 
-def _write_md_report(checks: List, filepath: Path, timestamp: datetime) -> None:
+def _write_md_report(
+    results: List[CheckResult],
+    filepath: Path,
+    timestamp: datetime,
+    run_id: str
+) -> None:
     """Write QA report as Markdown."""
+    overall_pass = all(r.passed for r in results)
+    
     lines = [
-        f"# QA Report",
-        f"",
-        f"**Generated:** {timestamp.strftime('%Y-%m-%d %H:%M:%S')}",
-        f"",
-        f"## Summary",
-        f"",
+        f"# QA Report: {run_id}",
+        "",
+        f"**Generated:** {timestamp.strftime('%Y-%m-%d %H:%M:%S')} UTC",
+        "",
+        "---",
+        "",
+        "## Summary",
+        "",
     ]
+    
+    # Overall status banner
+    if overall_pass:
+        lines.append("### ✅ QA GATE: PASSED")
+    else:
+        lines.append("### ❌ QA GATE: FAILED")
+    
+    lines.append("")
     
     # Summary table
     lines.append("| Check | Status | Errors | Warnings |")
-    lines.append("|-------|--------|--------|----------|")
+    lines.append("|-------|:------:|:------:|:--------:|")
     
-    for check in checks:
-        status = "✓ PASS" if check.passed else "✗ FAIL"
-        lines.append(f"| {check.name} | {status} | {len(check.errors)} | {len(check.warnings)} |")
-    
-    lines.append("")
-    
-    # Overall result
-    overall = all(check.passed for check in checks)
-    if overall:
-        lines.append("**Overall Result:** ✓ PASSED")
-    else:
-        lines.append("**Overall Result:** ✗ FAILED")
+    for r in results:
+        status = "✅ PASS" if r.passed else "❌ FAIL"
+        lines.append(f"| {r.name} | {status} | {len(r.errors)} | {len(r.warnings)} |")
     
     lines.append("")
-    lines.append("## Details")
+    
+    # Statistics
+    total = len(results)
+    passed = sum(1 for r in results if r.passed)
+    lines.append(f"**Total Checks:** {total} | **Passed:** {passed} | **Failed:** {total - passed}")
     lines.append("")
     
-    # Details for each check
-    for check in checks:
-        lines.append(f"### {check.name}")
+    # Detailed results
+    lines.append("---")
+    lines.append("")
+    lines.append("## Detailed Results")
+    lines.append("")
+    
+    for r in results:
+        status_icon = "✅" if r.passed else "❌"
+        lines.append(f"### {status_icon} {r.name}")
         lines.append("")
         
-        if check.errors:
+        # Errors
+        if r.errors:
             lines.append("**Errors:**")
-            for error in check.errors:
-                lines.append(f"- {error}")
+            for error in r.errors:
+                lines.append(f"- ❌ {error}")
             lines.append("")
         
-        if check.warnings:
+        # Warnings
+        if r.warnings:
             lines.append("**Warnings:**")
-            for warning in check.warnings:
-                lines.append(f"- {warning}")
+            for warning in r.warnings:
+                lines.append(f"- ⚠️ {warning}")
             lines.append("")
         
-        if not check.errors and not check.warnings:
-            lines.append("No issues found.")
+        # Metrics
+        if r.metrics:
+            lines.append("**Metrics:**")
+            lines.append("")
+            lines.append("| Metric | Value |")
+            lines.append("|--------|-------|")
+            for key, value in r.metrics.items():
+                if isinstance(value, float):
+                    lines.append(f"| {key} | {value:.4f} |")
+                else:
+                    lines.append(f"| {key} | {value} |")
+            lines.append("")
+        
+        if not r.errors and not r.warnings and not r.metrics:
+            lines.append("*No issues detected.*")
             lines.append("")
     
-    with open(filepath, 'w') as f:
+    # Footer
+    lines.append("---")
+    lines.append("")
+    lines.append("*Report generated by power-fair-value QA pipeline*")
+    
+    with open(filepath, 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines))
+
+
+def format_qa_summary_for_log(results: List[CheckResult]) -> str:
+    """Format QA results for logging."""
+    lines = ["QA Summary:"]
+    
+    for r in results:
+        status = "PASS" if r.passed else "FAIL"
+        lines.append(f"  [{status}] {r.name}")
+        
+        if r.errors:
+            for error in r.errors[:3]:  # Limit to first 3 errors
+                lines.append(f"         ❌ {error}")
+            if len(r.errors) > 3:
+                lines.append(f"         ... and {len(r.errors) - 3} more errors")
+    
+    overall = "PASSED" if all(r.passed for r in results) else "FAILED"
+    lines.append(f"  Overall: {overall}")
+    
+    return '\n'.join(lines)

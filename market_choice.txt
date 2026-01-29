@@ -1,0 +1,104 @@
+Here is the step-by-step scope freeze and project plan.
+
+# 1. Executive Summary
+*   **Market**: **DE (Germany-Luxembourg)** selected for high renewable penetration (volatility), liquidity, and excellent public data availability.
+*   **Drivers**: **Forecasted Load**, **Forecasted Wind Generation**, **Forecasted Solar Generation**.
+*   **Option Lock**: **Option A** (Next-day hourly forecasting, 24 steps for D+1).
+*   **Primary Data Source**: **ENTSO-E Transparency Platform** (via `entsoe-py` or raw API) or **SMARD.de**.
+*   **AI Integration**: Programmatic generation of a "Morning Trader Note" (textual interpretation of the forecast vs. recent history).
+*   **Success Headline**: "A reproducible pipeline achieving <15% MAE relative to mean price, with a fully automated directional daily brief."
+
+---
+
+# 2. Detailed Response
+
+### A) Requirements Recap
+*   **Objective**: Forecast Day-Ahead hourly prices and translate to a prompt view.
+*   **Key Constraints**: One market, public data only, Option A (D+1 hourly), AI component included.
+*   **Deliverables**: Code, Data QA, Baseline + Improved Model, AI module, Short Report.
+
+### B) Market Selection
+*   **Decision**: **DE (Germany / DE-LU)**
+*   **Rationale**:
+    1.  **Volatility**: Germany has the highest installed capacity of wind and solar in Europe, making price formation highly sensitive to fundamental weather drivers (ideal for modeling).
+    2.  **Data Quality**: The Bundesnetzagentur (SMARD) and ENTSO-E provide the most reliable, free, and granular energy data in Europe.
+    3.  **Liquidity**: It is the benchmark European power market; results are highly relevant to trading desks.
+*   **Feasibility**: Validated. `entsoe-py` library supports the DE-LU BZN (Bidding Zone) out of the box.
+
+### C) Driver Selection (Fundamental)
+We will use **3 fundamental drivers** sourced from ENTSO-E / SMARD. All are "Day-Ahead Forecasts" available before the price auction (12:00 CET).
+
+1.  **Day-Ahead Load Forecast [MW]**
+    *   *Definition*: Expected total electricity consumption for the bidding zone.
+    *   *Relationship*: Positive correlation (Higher Load $\to$ Higher Price).
+    *   *Source*: ENTSO-E Transparency (Load Domain).
+
+2.  **Day-Ahead Wind Generation Forecast [MW]**
+    *   *Definition*: Aggregated Onshore + Offshore wind forecast.
+    *   *Relationship*: Negative correlation (Higher Wind $\to$ Lower Price). *Note: Can drive negative prices in DE.*
+    *   *Source*: ENTSO-E Transparency (Generation Domain).
+
+3.  **Day-Ahead Solar Generation Forecast [MW]**
+    *   *Definition*: Aggregated solar photovoltaic forecast.
+    *   *Relationship*: Negative correlation (Higher Solar $\to$ Lower Price, specifically in peak hours 10:00–16:00).
+    *   *Source*: ENTSO-E Transparency (Generation Domain).
+
+*(Note: Fuel prices like TTF Gas or EUA Carbon are fundamental but reliable daily/hourly APIs are often paid or restricted. We will omit them to satisfy the "publicly available" constraint strictly, or use a static monthly average if a proxy is found.)*
+
+### D) Frozen Scope Statement
+*   **IN SCOPE**:
+    *   Market: DE-LU (Germany/Luxembourg).
+    *   Target: Day-Ahead Hourly Spot Price (EUR/MWh).
+    *   Horizon: 24 hours (00:00 - 23:00) for Day D+1.
+    *   Modeling: 1 Baseline (e.g., Naive/Persistence) + 1 Advanced (e.g., XGBoost, Linear Regression with interaction terms).
+    *   AI: LLM-based text generation for result interpretation.
+*   **OUT OF SCOPE**:
+    *   Intraday or Balancing markets.
+    *   Complex grid constraints or nodal pricing.
+    *   Paid data feeds (Bloomberg, Refinitiv, Wattsight).
+    *   Live trading execution.
+
+### E) Success Metrics
+1.  **Data QA**:
+    *   0% gaps in target variable (interpolation allowed for max 2h blocks).
+    *   Drivers aligned to UTC/CET correctly without look-ahead bias.
+2.  **Forecasting Accuracy**:
+    *   **MAE (Mean Absolute Error)**: Target < 15 EUR/MWh (depending on volatility period).
+    *   **RMSE**: Reported for penalty on outliers.
+    *   **Beat Baseline**: Advanced model must outperform Naive (D-1 or D-7) by >5%.
+3.  **Trading Translation**:
+    *   **Directional Accuracy**: % of hours where the model correctly predicts the sign of the price move vs previous day.
+4.  **Engineering**:
+    *   Pipeline runs end-to-end with one command (e.g., `python main.py`).
+    *   Environment defined in `requirements.txt`.
+5.  **AI Component**:
+    *   Successful API call (or local LLM run) producing a coherent paragraph summarizing the "Bearish/Bullish" view based on the data.
+
+### F) Submission Artifacts Checklist
+1.  **`README.md`**: Setup instructions, scope summary, and explanation of the models.
+2.  **`requirements.txt`**: List of dependencies (`pandas`, `scikit-learn`, `entsoe-py`, etc.).
+3.  **`data_ingestion.py`**: Scripts to fetch data from ENTSO-E/SMARD and save to CSV.
+4.  **`qa_checks.py`**: Script to validate data quality (null checks, range checks).
+5.  **`model_pipeline.py`**: Training, validation, and prediction code.
+6.  **`ai_brief.py`**: Code generating the textual market note using an LLM.
+7.  **`report.pdf`**: 1-3 page executive summary of the methodology and results.
+8.  **`submission.csv`**: Format: `[datetime, predicted_price]`.
+
+### G) Risks & Mitigations
+1.  **Risk**: ENTSO-E API token delay or downtime.
+    *   *Mitigation*: Register for a token immediately. Fallback to SMARD.de (no token required) or download manual CSV dumps for the prototype if API fails.
+2.  **Risk**: Negative prices (common in DE) breaking error metrics (MAPE).
+    *   *Mitigation*: Use MAE/RMSE instead of MAPE. Do not use Log-transform on prices without shifting.
+3.  **Risk**: Timezone confusion (UTC vs CET/CEST).
+    *   *Mitigation*: Convert EVERYTHING to UTC internally immediately upon ingestion. Only convert to CET for final visualization.
+4.  **Risk**: Look-ahead bias (using actuals instead of forecasts).
+    *   *Mitigation*: Explicitly map `Load Forecast` (not Actual Load) to the feature set.
+5.  **Risk**: "Fancy" model overfitting.
+    *   *Mitigation*: Use a strict time-series split (Train: 2023, Test: 2024) rather than random shuffle.
+
+### H) Next Steps (Execution Plan)
+*   **Day 1**: Get ENTSO-E API Token. Write `data_ingestion.py` to pull 2023-2024 Price, Load, Wind, Solar.
+*   **Day 2**: Clean data. Handle missing values. Visualize correlations.
+*   **Day 3**: Build Baseline Model (Persistence) + XGBoost Model. Calculate metrics.
+*   **Day 4**: Implement `ai_brief.py` (Construct a prompt string from df statistics $\to$ call LLM).
+*   **Day 5**: Write Report and finalize code structure.

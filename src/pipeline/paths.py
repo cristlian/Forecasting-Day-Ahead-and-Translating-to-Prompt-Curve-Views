@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Optional
+from datetime import datetime
 
 
 class PathBuilder:
@@ -25,19 +26,37 @@ class PathBuilder:
         self.models = self.root / "models"
         self.reports = self.root / "reports"
         self.report = self.root / "report"
+        self.docs = self.root / "docs"
     
-    # Data paths
+    # Data paths with run_id support
+    def raw_data_dir(self, run_id: str) -> Path:
+        """Path to raw data directory for a run."""
+        return self.data / "raw" / run_id
+    
+    def clean_data_dir(self, run_id: str) -> Path:
+        """Path to clean data directory for a run."""
+        return self.data / "clean" / run_id
+    
+    def feature_data_dir(self, run_id: str) -> Path:
+        """Path to feature data directory for a run."""
+        return self.data / "features" / run_id
+    
     def raw_data(self, filename: str) -> Path:
-        """Path to raw data file."""
+        """Path to raw data file (legacy)."""
         return self.data / "raw" / filename
     
     def clean_data(self, filename: str) -> Path:
-        """Path to cleaned data file."""
+        """Path to cleaned data file (legacy)."""
         return self.data / "clean" / filename
     
     def feature_data(self, filename: str) -> Path:
-        """Path to feature data file."""
+        """Path to feature data file (legacy)."""
         return self.data / "features" / filename
+    
+    # Cache directory
+    def cache_dir(self) -> Path:
+        """Path to data cache directory."""
+        return self.data / "cache"
     
     # Output paths
     def baseline_pred(self, filename: str) -> Path:
@@ -58,6 +77,10 @@ class PathBuilder:
         return self.models / "trained" / filename
     
     # Report paths
+    def qa_report_dir(self) -> Path:
+        """Path to QA reports directory."""
+        return self.reports / "qa"
+    
     def qa_report(self, filename: str) -> Path:
         """Path to QA report."""
         return self.reports / "qa" / filename
@@ -93,6 +116,7 @@ class PathBuilder:
             self.data / "raw",
             self.data / "clean",
             self.data / "features",
+            self.data / "cache",
             self.outputs / "preds_baseline",
             self.outputs / "preds_model",
             self.outputs / "signals",
@@ -109,3 +133,20 @@ class PathBuilder:
         
         for d in dirs:
             d.mkdir(parents=True, exist_ok=True)
+    
+    def ensure_run_dirs(self, run_id: str):
+        """Create directories for a specific run."""
+        dirs = [
+            self.raw_data_dir(run_id),
+            self.clean_data_dir(run_id),
+            self.feature_data_dir(run_id),
+        ]
+        for d in dirs:
+            d.mkdir(parents=True, exist_ok=True)
+
+
+def generate_run_id(market: str, timestamp: Optional[datetime] = None) -> str:
+    """Generate a unique run ID."""
+    if timestamp is None:
+        timestamp = datetime.utcnow()
+    return f"{timestamp.strftime('%Y%m%d_%H%M%S')}_{market}"

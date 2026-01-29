@@ -1,25 +1,53 @@
 # Market Configuration
 # Defines which power market to analyze and time parameters
+# Source: market_choice.txt - DE-LU (Germany/Luxembourg) Bidding Zone
 
 market:
-  code: "DE"  # Germany/Austria market (can be: DE, FR, NL, etc.)
-  name: "Germany/Austria"
+  code: "DE_LU"  # Germany-Luxembourg bidding zone (ENTSO-E: DE-LU BZN)
+  name: "Germany-Luxembourg"
   timezone: "Europe/Berlin"
+  entsoe_area_code: "10Y1001A1001A82H"  # DE-LU bidding zone EIC code
   
 # Data date range
 date_range:
-  start: "2022-01-01"
-  end: "2024-12-31"
+  start: "2023-01-01"  # Training starts 2023
+  end: "2024-12-31"    # Test period 2024
   
 # Target variable
 target:
   column: "day_ahead_price"
   unit: "EUR/MWh"
-  frequency: "hourly"  # or "15min", "30min"
+  frequency: "hourly"
+  auction_time: "12:00"  # CET, day-ahead auction closes at noon
+  
+# Fundamental drivers (day-ahead forecasts only - no look-ahead bias)
+drivers:
+  - name: "forecast_load"
+    description: "Day-Ahead Load Forecast"
+    unit: "MW"
+    correlation: "positive"  # Higher Load -> Higher Price
+    
+  - name: "forecast_wind"
+    description: "Day-Ahead Wind Generation Forecast (Onshore + Offshore)"
+    unit: "MW"
+    correlation: "negative"  # Higher Wind -> Lower Price
+    
+  - name: "forecast_solar"
+    description: "Day-Ahead Solar Generation Forecast"
+    unit: "MW"
+    correlation: "negative"  # Higher Solar -> Lower Price
+
+# Data sources
+data_sources:
+  primary: "entsoe"  # ENTSO-E Transparency Platform
+  fallback: "smard"  # SMARD.de (Bundesnetzagentur) - no token required
   
 # Training/validation split
 split:
-  method: "rolling_origin"  # or "expanding_window"
+  method: "rolling_origin"
   train_days: 365
   validation_days: 30
   test_days: 7
+  
+# Internal timezone handling
+internal_timezone: "UTC"  # All internal processing in UTC

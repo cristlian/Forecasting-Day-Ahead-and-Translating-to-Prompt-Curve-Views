@@ -64,7 +64,7 @@ def test_schema_validation_passes():
 
 def test_datetime_index_timezone_aware():
     """Test that datetime columns can be made timezone-aware."""
-    dates = pd.date_range("2024-01-01", periods=24, freq="H", tz="Europe/Berlin")
+    dates = pd.date_range("2024-01-01", periods=24, freq="h", tz="Europe/Berlin")
     df = pd.DataFrame({"price": np.random.rand(24)}, index=dates)
     
     assert df.index.tz is not None

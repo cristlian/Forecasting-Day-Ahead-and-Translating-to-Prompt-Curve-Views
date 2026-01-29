@@ -1,61 +1,70 @@
 # Schema Contract
 # Defines strict column names, data types, units, and ranges
+# Aligned with market_choice.txt: DE-LU market, day-ahead forecasts only
 
 columns:
   timestamp:
-    dtype: "datetime64[ns]"
+    dtype: "datetime64[ns, UTC]"
     timezone_aware: true
     required: true
     
   day_ahead_price:
     dtype: "float64"
     unit: "EUR/MWh"
-    range: [-500, 3000]  # theoretical bounds
+    range: [-500, 3000]  # DE can have negative prices during high wind
     required: true
     
-  actual_load:
-    dtype: "float64"
-    unit: "MW"
-    range: [0, 100000]
-    required: true
-    
+  # Day-ahead FORECASTS (not actuals) - used as features
   forecast_load:
     dtype: "float64"
     unit: "MW"
-    range: [0, 100000]
-    required: false
+    range: [20000, 90000]  # DE-LU typical load range
+    required: true
+    description: "Day-ahead load forecast published before auction"
     
-  wind_generation:
+  forecast_wind:
     dtype: "float64"
     unit: "MW"
-    range: [0, 70000]
+    range: [0, 75000]  # DE has very high wind capacity
     required: true
+    description: "Day-ahead wind generation forecast (onshore+offshore)"
     
-  solar_generation:
+  forecast_solar:
     dtype: "float64"
     unit: "MW"
-    range: [0, 50000]
+    range: [0, 55000]  # DE solar capacity
     required: true
+    description: "Day-ahead solar generation forecast"
     
-  temperature:
+  # Optional: Actuals (only for validation, NOT for features)
+  actual_load:
     dtype: "float64"
-    unit: "celsius"
-    range: [-30, 50]
+    unit: "MW"
+    range: [20000, 90000]
     required: false
+    description: "Actual load (for validation only)"
     
-  gas_price:
+  actual_wind:
     dtype: "float64"
-    unit: "EUR/MWh"
-    range: [0, 500]
+    unit: "MW"
+    range: [0, 75000]
     required: false
+    description: "Actual wind generation (for validation only)"
     
-  coal_price:
+  actual_solar:
     dtype: "float64"
-    unit: "EUR/MWh"
-    range: [0, 300]
+    unit: "MW"
+    range: [0, 55000]
     required: false
+    description: "Actual solar generation (for validation only)"
 
 # DST handling
 dst_policy:
   spring_forward: "drop"  # drop the non-existent hour
   fall_back: "average"     # average the duplicate hour
+
+# Alignment requirements
+alignment:
+  frequency: "1H"
+  target_hours: 24  # D+1 forecast horizon
+  cutoff_hour: 12   # CET, features must be available before this time
