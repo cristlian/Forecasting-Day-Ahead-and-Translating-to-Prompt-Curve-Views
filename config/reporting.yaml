@@ -9,7 +9,7 @@ output_paths:
 llm_settings:
   enabled: true          # Set to true
   provider: "gemini"     # Changed from "openai"
-  model: "gemini-2.0-flash"  # Current available model
+  model: "gemini-2.5-flash"  # Using 2.5-flash
   max_tokens: 2000
   temperature: 0.3
   

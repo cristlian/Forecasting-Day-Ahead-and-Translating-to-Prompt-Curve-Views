@@ -303,17 +303,18 @@ def _get_api_key(provider: str) -> Optional[str]:
 def _call_gemini_agent(prompt: str, config: Dict, api_key: str) -> str:
     """Call Gemini API with Senior Trader persona."""
     try:
-        from google import genai
-        from google.genai import types
+        import google.generativeai as genai
         
-        client = genai.Client(api_key=api_key)
+        genai.configure(api_key=api_key)
         
-        full_prompt = SENIOR_TRADER_SYSTEM_PROMPT + "\n\n" + prompt
+        model = genai.GenerativeModel(
+            model_name=config.get("model", "gemini-2.0-flash"),
+            system_instruction=SENIOR_TRADER_SYSTEM_PROMPT,
+        )
         
-        response = client.models.generate_content(
-            model=config.get("model", "gemini-2.0-flash"),
-            contents=full_prompt,
-            config=types.GenerateContentConfig(
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.GenerationConfig(
                 max_output_tokens=config.get("max_tokens", 500),
                 temperature=config.get("temperature", 0.3),
             )
