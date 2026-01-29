@@ -51,6 +51,8 @@ def generate_commentary(
             commentary = _call_openai(prompt, llm_config, api_key)
         elif provider == "anthropic":
             commentary = _call_anthropic(prompt, llm_config, api_key)
+        elif provider == "gemini":
+            commentary = _call_gemini(prompt, llm_config, api_key)
         else:
             raise ValueError(f"Unknown LLM provider: {provider}")
         
@@ -76,6 +78,7 @@ def _get_api_key(provider: str) -> Optional[str]:
     key_map = {
         "openai": "OPENAI_API_KEY",
         "anthropic": "ANTHROPIC_API_KEY",
+        "gemini": "GEMINI_API_KEY",
     }
     
     env_var = key_map.get(provider)
@@ -179,6 +182,33 @@ def _call_anthropic(prompt: str, config: Dict, api_key: str) -> str:
         return "Anthropic package not available"
     except Exception as e:
         logger.error(f"Anthropic API error: {e}")
+        return f"API error: {e}"
+
+
+def _call_gemini(prompt: str, config: Dict, api_key: str) -> str:
+    """Call Google Gemini API using the new google-genai package."""
+    try:
+        from google import genai
+        from google.genai import types
+        
+        client = genai.Client(api_key=api_key)
+        
+        response = client.models.generate_content(
+            model=config["model"],
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                max_output_tokens=config["max_tokens"],
+                temperature=config["temperature"],
+            )
+        )
+        
+        return response.text
+    
+    except ImportError:
+        logger.error("google-genai package not installed. Install with: pip install google-genai")
+        return "Gemini package not available"
+    except Exception as e:
+        logger.error(f"Gemini API error: {e}")
         return f"API error: {e}"
 
 

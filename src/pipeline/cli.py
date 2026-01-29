@@ -43,20 +43,23 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Run full pipeline (ingestion -> QA -> features) - requires API key or cache
-  python -m src.pipeline.cli run --start-date 2024-01-01 --end-date 2024-01-31
+    # Run full pipeline (ingestion -> QA -> features) - requires API key or cache
+    python -m pipeline run --start-date 2024-01-01 --end-date 2024-01-31
 
-  # Train models using cached features (no API key needed)
-  python -m src.pipeline.cli train --cache-only
+    # Train models using cached features (no API key needed)
+    python -m pipeline train --cache-only
 
-  # Train models using sample data (no API key needed, works on fresh clone)
-  python -m src.pipeline.cli train --use-sample
+    # Train models using sample data (no API key needed, works on fresh clone)
+    python -m pipeline train --use-sample
 
-  # Train only baseline model
-  python -m src.pipeline.cli train --model baseline --use-sample
+    # Train only baseline model
+    python -m pipeline train --model baseline --use-sample
 
-  # Evaluate models
-  python -m src.pipeline.cli eval --use-sample
+    # Evaluate models
+    python -m pipeline eval --use-sample
+
+    # Validate with stress tests
+    python -m pipeline validate --date 2026-01-29 --use-sample
 
 Environment Variables (OPTIONAL):
   ENTSOE_API_KEY    API key for ENTSO-E Transparency Platform
@@ -170,13 +173,39 @@ Environment Variables (OPTIONAL):
         help="Enable verbose (debug) logging"
     )
     
-    # Validate command
-    validate_parser = subparsers.add_parser("validate", help="Validate configuration only")
+    # Validate command (Step 7)
+    validate_parser = subparsers.add_parser("validate", help="Run validation + stress tests (Step 7)")
+    validate_parser.add_argument(
+        "--date",
+        type=str,
+        default=None,
+        help="Validation date (YYYY-MM-DD) used for deterministic run_id"
+    )
+    validate_parser.add_argument(
+        "--cache-only",
+        action="store_true",
+        help="Only use cached features (fail if not available)"
+    )
+    validate_parser.add_argument(
+        "--use-sample",
+        action="store_true",
+        help="Use synthetic sample data (works without API keys)"
+    )
+    validate_parser.add_argument(
+        "--llm-test",
+        action="store_true",
+        help="Run optional LLM test (skips if API key missing)"
+    )
     validate_parser.add_argument(
         "--config-dir",
         type=str,
         default="config",
         help="Path to configuration directory"
+    )
+    validate_parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Enable verbose (debug) logging"
     )
     
     args = parser.parse_args()
@@ -298,10 +327,16 @@ def _handle_eval(args, logger) -> int:
     """Handle the 'eval' command with cross-validation."""
     from .train import load_features, CacheMissingError
     from .paths import PathBuilder, generate_run_id
-    from ..models.cv import RollingOriginCV
-    from ..models.baseline import NaiveSeasonalModel
-    from ..models.model import PowerPriceModel
-    from ..validation.metrics import calculate_metrics
+    try:
+        from ..models.cv import RollingOriginCV
+        from ..models.baseline import NaiveSeasonalModel
+        from ..models.model import PowerPriceModel
+        from ..validation.metrics import calculate_metrics
+    except ImportError:
+        from models.cv import RollingOriginCV
+        from models.baseline import NaiveSeasonalModel
+        from models.model import PowerPriceModel
+        from validation.metrics import calculate_metrics
     import json
     
     logger.info(f"Loading configuration from {args.config_dir}")
@@ -386,22 +421,37 @@ def _handle_eval(args, logger) -> int:
 
 
 def _handle_validate(args, logger) -> int:
-    """Handle the 'validate' command."""
-    logger.info(f"Validating configuration in {args.config_dir}")
-    
+    """Handle the 'validate' command (Step 7)."""
+    try:
+        from ..validation.runner import run_validation
+    except ImportError:
+        from validation.runner import run_validation
+    from .train import CacheMissingError
+
+    logger.info(f"Loading configuration from {args.config_dir}")
+
     try:
         config = load_config(args.config_dir)
-        logger.info("✓ Configuration is valid")
-        
-        # Print summary
-        market = config.get("market", {})
-        logger.info(f"  Market: {market.get('code', 'N/A')} ({market.get('name', 'N/A')})")
-        logger.info(f"  Timezone: {market.get('timezone', 'N/A')}")
-        
-        return 0
-    
     except Exception as e:
         logger.error(f"✗ Configuration invalid: {e}")
+        return 1
+
+    try:
+        result = run_validation(
+            config=config,
+            validation_date=args.date,
+            cache_only=args.cache_only,
+            use_sample=args.use_sample,
+            llm_test=args.llm_test,
+        )
+        logger.info(f"Validation report: {result.report_path}")
+        logger.info(f"Validation metrics: {result.metrics_path}")
+        return 0
+    except CacheMissingError as e:
+        logger.error(f"\n{e}")
+        return 1
+    except Exception as e:
+        logger.error(f"Validation failed: {e}")
         return 1
 
 

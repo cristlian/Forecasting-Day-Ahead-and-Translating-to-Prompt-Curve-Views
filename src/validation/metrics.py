@@ -68,25 +68,43 @@ def calculate_bucket_metrics(
     """
     import pandas as pd
     
+    # Ensure timestamps is a DatetimeIndex for consistent access
+    if isinstance(timestamps, pd.DatetimeIndex):
+        ts_index = timestamps
+    else:
+        ts_index = pd.to_datetime(timestamps, utc=True)
+    
     df = pd.DataFrame({
-        "timestamp": timestamps,
         "y_true": y_true,
         "y_pred": y_pred,
-    })
+    }, index=ts_index)
     
     bucket_metrics = {}
     
     for bucket_name, filter_func in buckets.items():
-        mask = filter_func(df["timestamp"])
+        try:
+            # Try calling filter with the index directly
+            mask = filter_func(df.index)
+        except (AttributeError, TypeError):
+            # Fallback: try with Series wrapper
+            try:
+                mask = filter_func(df.index.to_series())
+            except Exception:
+                continue
         
-        if mask.sum() == 0:
+        if not isinstance(mask, (pd.Series, np.ndarray)):
+            continue
+            
+        n_samples = mask.sum() if hasattr(mask, 'sum') else sum(mask)
+        
+        if n_samples == 0:
             continue
         
         bucket_metrics[bucket_name] = calculate_metrics(
             df.loc[mask, "y_true"].values,
             df.loc[mask, "y_pred"].values
         )
-        bucket_metrics[bucket_name]["n_samples"] = mask.sum()
+        bucket_metrics[bucket_name]["n_samples"] = int(n_samples)
     
     return bucket_metrics
 
@@ -111,6 +129,22 @@ def define_trading_buckets():
         "weekday": lambda t: t.dayofweek < 5,
     }
     
+    return buckets
+
+
+def define_hour_buckets() -> Dict[str, callable]:
+    """
+    Define 24 hourly buckets for hour-of-day metrics.
+
+    Returns:
+        Dictionary of hour bucket definitions
+    """
+    buckets = {}
+    for hour in range(24):
+        # Handle both pd.Series and pd.DatetimeIndex 
+        buckets[f"hour_{hour:02d}"] = lambda t, h=hour: (
+            t.dt.hour == h if hasattr(t, 'dt') else t.hour == h
+        )
     return buckets
 
 

@@ -1,11 +1,12 @@
 # Pipeline Progress Tracker
 
-## Current Status: Steps 2-6 Implementation Complete
+## Current Status: Steps 1-6 Complete, Ready for Step 7
 
 ### Completed
 - [x] Scope freeze normalized into configs (market.yaml, schema.yaml, features.yaml)
 - [x] docs/00_scope.md updated with DE-LU market details
-- [x] Ingestion module (src/ingest/) with ENTSO-E + SMARD fallback
+- [x] **Data Source**: Energy-Charts API (Fraunhofer ISE) - No API key required!
+- [x] Ingestion module (src/ingest/) with Energy-Charts + ENTSO-E fallback
 - [x] QA gate (src/qa/) with checks and report generation
 - [x] Feature pipeline (src/features/) with leakage-safe design
 - [x] Pipeline wiring (src/pipeline/) with CLI
@@ -14,16 +15,25 @@
 - [x] **Rolling-origin CV** (src/models/cv.py) - Time-series cross-validation
 - [x] **Offline mode** - Works without API keys using sample data
 
-### Next Steps
-1. Generate trading signals from predictions
-2. LLM commentary integration
-3. Final report assembly
+### Next Steps (Step 7+)
+1. **Download full dataset**: `python -c "from test_energy_charts import fetch_full_dataset; fetch_full_dataset('2023-01-01', '2024-12-31', 'data/raw')"`
+2. Run full pipeline with real data
+3. Generate trading signals from predictions
+4. LLM commentary integration (Gemini API ready)
+5. Final report assembly
 
 ---
 
 ## How to Run
 
-### Offline Mode (No API Keys Required)
+### Step 1: Download Data (Energy-Charts - No API Key!)
+
+```bash
+# Download 2 years of data automatically
+python -c "from test_energy_charts import fetch_full_dataset; fetch_full_dataset('2023-01-01', '2024-12-31', 'data/raw')"
+```
+
+### Step 2: Run Full Pipeline
 
 ```bash
 # Train both models using synthetic sample data

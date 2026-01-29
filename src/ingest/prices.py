@@ -61,6 +61,21 @@ def fetch_day_ahead_prices(
         if cached is not None:
             return cached
     
+    # Try local file in data/raw (Manual Download)
+    if cache_dir:
+        try:
+            raw_dir = cache_dir.parent / "raw"
+            df = _fetch_from_local_file(market, start_date, end_date, raw_dir)
+            if df is not None:
+                logger.info(f"Successfully loaded {len(df)} price records from local file")
+                # Normalize immediately as it's raw data
+                df = normalize_prices(df, config)
+                if cache_dir:
+                    save_to_cache(df, cache_path)
+                return df
+        except Exception as e:
+            logger.warning(f"Local file load failed: {e}")
+
     # Try ENTSO-E API
     api_key = get_entsoe_api_key()
     df = None
@@ -141,6 +156,97 @@ def _fetch_from_entsoe(
         df = prices.rename(columns={prices.columns[0]: "day_ahead_price"})
     
     df.index.name = "timestamp"
+    return df
+
+
+def _fetch_from_local_file(
+    market: str,
+    start_date: datetime,
+    end_date: datetime,
+    raw_dir: Path,
+) -> Optional[pd.DataFrame]:
+    """Fetch prices from local CSV file in data/raw."""
+    # Expected filename: prices_MARKET.csv (e.g., prices_DE_LU.csv)
+    file_path = raw_dir / f"prices_{market}.csv"
+    
+    if not file_path.exists():
+        logger.debug(f"Local file not found: {file_path}")
+        return None
+        
+    logger.info(f"Loading prices from local file: {file_path}")
+    
+    # Try different separators and formats
+    try:
+        # Check first line to detect format
+        with open(file_path, 'r') as f:
+            first_line = f.readline()
+            
+        skip_rows = 0
+        if "Day-ahead Prices" in first_line:
+            skip_rows = 1  # Skip title row if present (ENTSO-E format)
+        
+        # Check if it's Energy-Charts format (timestamp,day_ahead_price)
+        if 'timestamp' in first_line.lower() and 'day_ahead_price' in first_line.lower():
+            # Energy-Charts format - already clean
+            df = pd.read_csv(file_path, parse_dates=['timestamp'], index_col='timestamp')
+            df.index = pd.to_datetime(df.index, utc=True)
+            logger.info(f"Detected Energy-Charts format, loaded {len(df)} records")
+            return df
+            
+        df = pd.read_csv(file_path, sep=None, engine='python', skiprows=skip_rows)
+    except Exception as e:
+        logger.warning(f"Error reading CSV {file_path}: {e}")
+        return None
+        
+    # Clean column names
+    df.columns = df.columns.astype(str).str.strip().str.replace('"', '')
+
+    # Identify columns
+    price_col = None
+    time_col = None
+    
+    for col in df.columns:
+        c_lower = col.lower()
+        if "price" in c_lower or "eur/mwh" in c_lower:
+            price_col = col
+        if "time" in c_lower or "mtu" in c_lower or "date" in c_lower:
+            time_col = col
+            
+    if not price_col:
+        logger.warning(f"Could not identify price column. Columns: {df.columns}")
+        return None
+        
+    # Rename and Process
+    df = df.rename(columns={price_col: "day_ahead_price"})
+    
+    # Handle timestamp
+    if time_col:
+        # ENTSO-E format: "dd.mm.yyyy HH:MM - dd.mm.yyyy HH:MM"
+        # Take start time
+        try:
+            if df[time_col].dtype == object and df[time_col].str.contains(" - ").any():
+                 df['timestamp'] = df[time_col].str.split(" - ").str[0]
+                 # Generally ENTSO-E is DD.MM.YYYY HH:MM
+                 df['timestamp'] = pd.to_datetime(df['timestamp'], dayfirst=True)
+            else:
+                 df['timestamp'] = pd.to_datetime(df[time_col], dayfirst=True)
+        except Exception as e:
+            logger.warning(f"Error parsing timestamps: {e}")
+            return None
+    else:
+        # Fallback to first column
+        try:
+             df['timestamp'] = pd.to_datetime(df.iloc[:, 0], dayfirst=True)
+        except:
+             return None
+
+    df = df.set_index('timestamp')
+    df = df[['day_ahead_price']]
+    
+    # Ensure numeric
+    df['day_ahead_price'] = pd.to_numeric(df['day_ahead_price'], errors='coerce')
+    df = df.dropna()
+    
     return df
 
 

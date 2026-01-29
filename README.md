@@ -104,10 +104,13 @@ Train models using synthetic sample data (works on fresh clone):
 
 ```bash
 # Train both baseline and improved models
-python -m src.pipeline.cli train --use-sample
+python -m pipeline train --use-sample
 
 # Run cross-validation evaluation
-python -m src.pipeline.cli eval --use-sample
+python -m pipeline eval --use-sample
+
+# Run validation + stress tests (Step 7)
+python -m pipeline validate --date 2026-01-29 --use-sample
 
 # Run all tests
 pytest tests/ -v
@@ -122,10 +125,13 @@ export ENTSOE_API_KEY='your-key-here'  # Linux/Mac
 $env:ENTSOE_API_KEY='your-key-here'    # PowerShell
 
 # Run full pipeline (ingestion -> QA -> features)
-python -m src.pipeline.cli run --start-date 2024-01-01 --end-date 2024-06-30
+python -m pipeline run --start-date 2024-01-01 --end-date 2024-06-30
 
 # Train models using generated features
-python -m src.pipeline.cli train --cache-only
+python -m pipeline train --cache-only
+
+# Validate using cached features
+python -m pipeline validate --date 2026-01-29 --cache-only
 ```
 
 ### Environment Variables
@@ -134,6 +140,8 @@ python -m src.pipeline.cli train --cache-only
 |----------|----------|-------------|
 | `ENTSOE_API_KEY` | No | ENTSO-E API key for data ingestion. Not needed for `--use-sample` or `--cache-only`. Get key at: https://transparency.entsoe.eu/ |
 | `OPENAI_API_KEY` | No | For LLM commentary (optional feature) |
+| `ANTHROPIC_API_KEY` | No | For LLM commentary (optional feature) |
+| `GEMINI_API_KEY` | No | For LLM commentary (optional feature) |
 
 See `.env.example` for full list.
 
@@ -218,7 +226,8 @@ See [Trading Guidance](docs/trading_guidance.md) for detailed explanation of:
 - `outputs/preds_baseline/` - Baseline predictions
 - `outputs/preds_model/` - Improved model predictions  
 - `reports/metrics/` - Evaluation metrics (JSON)
-- `reports/validation/` - Comparison reports (Markdown)
+- `reports/validation/` - Validation reports (Markdown)
+- `reports/metrics/validation_*.json` - Validation metrics
 
 ---
 

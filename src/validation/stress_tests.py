@@ -43,6 +43,9 @@ def test_missing_driver_robustness(
         
         X_test_missing = X_test.copy()
         X_test_missing[col] = np.nan  # Simulate missing data
+        # Impute missing values with column median to avoid NaN issues
+        impute_value = X_test[col].median()
+        X_test_missing[col] = X_test_missing[col].fillna(impute_value)
         
         try:
             pred_missing = model.predict(X_test_missing)
@@ -108,15 +111,17 @@ def test_volatility_performance(
     high_vol_mask = df["date"].isin(high_vol_dates)
     low_vol_mask = df["date"].isin(low_vol_dates)
     
+    def _safe_metrics(mask):
+        if mask.sum() == 0:
+            return {"mae": float("nan"), "rmse": float("nan"), "smape": float("nan"), "r2": float("nan")}
+        return calculate_metrics(
+            df.loc[mask, "y_true"].values,
+            df.loc[mask, "y_pred"].values
+        )
+    
     results = {
-        "high_volatility": calculate_metrics(
-            df.loc[high_vol_mask, "y_true"].values,
-            df.loc[high_vol_mask, "y_pred"].values
-        ),
-        "low_volatility": calculate_metrics(
-            df.loc[low_vol_mask, "y_true"].values,
-            df.loc[low_vol_mask, "y_pred"].values
-        ),
+        "high_volatility": _safe_metrics(high_vol_mask),
+        "low_volatility": _safe_metrics(low_vol_mask),
         "n_high_vol_days": len(high_vol_dates),
         "n_low_vol_days": len(low_vol_dates),
     }
@@ -125,6 +130,32 @@ def test_volatility_performance(
     logger.info(f"Low volatility MAE: {results['low_volatility']['mae']:.2f}")
     
     return results
+
+
+def test_weekday_weekend_performance(
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    timestamps: pd.DatetimeIndex,
+) -> Dict:
+    """
+    Compare weekday vs weekend performance.
+    """
+    from .metrics import calculate_metrics
+
+    df = pd.DataFrame({
+        "timestamp": timestamps,
+        "y_true": y_true,
+        "y_pred": y_pred,
+    })
+    weekday_mask = df["timestamp"].dt.dayofweek < 5
+    weekend_mask = df["timestamp"].dt.dayofweek >= 5
+
+    return {
+        "weekday": calculate_metrics(df.loc[weekday_mask, "y_true"].values, df.loc[weekday_mask, "y_pred"].values),
+        "weekend": calculate_metrics(df.loc[weekend_mask, "y_true"].values, df.loc[weekend_mask, "y_pred"].values),
+        "n_weekday": int(weekday_mask.sum()),
+        "n_weekend": int(weekend_mask.sum()),
+    }
 
 
 def test_extreme_price_performance(

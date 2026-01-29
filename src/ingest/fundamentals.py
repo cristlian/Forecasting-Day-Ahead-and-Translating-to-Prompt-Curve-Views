@@ -60,6 +60,20 @@ def fetch_fundamentals(
         if cached is not None:
             return cached
     
+    # Try local files in data/raw (Manual Download)
+    if cache_dir:
+        try:
+            raw_dir = cache_dir.parent / "raw"
+            df = _fetch_fundamentals_local(market, start_date, end_date, raw_dir)
+            if df is not None:
+                logger.info(f"Successfully loaded {len(df)} fundamental records from local files")
+                df = normalize_fundamentals(df, config)
+                if cache_dir:
+                    save_to_cache(df, cache_path)
+                return df
+        except Exception as e:
+            logger.warning(f"Local fundamentals load failed: {e}")
+
     # Try ENTSO-E API
     api_key = get_entsoe_api_key()
     df = None
@@ -100,6 +114,131 @@ def fetch_fundamentals(
     if cache_dir:
         cache_path = get_cache_path(cache_dir, market, "fundamentals", start_date, end_date)
         save_to_cache(df, cache_path)
+    
+    return df
+
+
+def _fetch_fundamentals_local(
+    market: str,
+    start_date: datetime,
+    end_date: datetime,
+    raw_dir: Path,
+) -> Optional[pd.DataFrame]:
+    """Fetch fundamentals from local CSV files in data/raw."""
+    # Files: load_MARKET.csv, gen_forecast_MARKET.csv
+    dfs = []
+    
+    # Helper to load Energy-Charts format (already clean with timestamp index)
+    def load_energy_charts_csv(path, expected_cols):
+        if not path.exists(): return None
+        try:
+            with open(path, 'r') as f:
+                first_line = f.readline().lower()
+            # Energy-Charts format: timestamp index with named columns
+            if 'timestamp' in first_line and any(col in first_line for col in expected_cols):
+                df = pd.read_csv(path, parse_dates=['timestamp'], index_col='timestamp')
+                df.index = pd.to_datetime(df.index, utc=True)
+                logger.info(f"Loaded Energy-Charts format from {path.name}: {len(df)} records")
+                return df
+        except Exception as e:
+            logger.debug(f"Not Energy-Charts format: {e}")
+        return None
+    
+    # helper to clean and parse ENTSO-E format
+    def load_entsoe_csv(path):
+        if not path.exists(): return None
+        try:
+            with open(path, 'r') as f:
+                # Basic check for metadata header
+                first = f.readline()
+                skip = 1 if any(x in first for x in ["Load", "Generation"]) else 0
+            
+            df = pd.read_csv(path, sep=None, engine='python', skiprows=skip)
+            df.columns = df.columns.astype(str).str.strip().str.replace('"', '')
+            
+            # Time column
+            time_col = next((c for c in df.columns if "time" in c.lower() or "mtu" in c.lower()), None)
+            if time_col:
+                if df[time_col].dtype == object and df[time_col].str.contains(" - ").any():
+                    # "01.01.2023 00:00 - 01.01.2023 01:00"
+                    df['timestamp'] = df[time_col].str.split(" - ").str[0]
+                    df['timestamp'] = pd.to_datetime(df['timestamp'], dayfirst=True)
+                else:
+                    try:
+                        df['timestamp'] = pd.to_datetime(df[time_col], dayfirst=True)
+                    except: 
+                        df['timestamp'] = pd.to_datetime(df[time_col])
+                df = df.set_index('timestamp')
+                return df
+        except Exception as e:
+            logger.warning(f"Error parsing {path}: {e}")
+        return None
+
+    # Try Energy-Charts format first (already properly formatted)
+    # 1. Load Forecast (Energy-Charts format)
+    load_path = raw_dir / f"load_{market}.csv"
+    df_ec_load = load_energy_charts_csv(load_path, ['forecast_load'])
+    if df_ec_load is not None and 'forecast_load' in df_ec_load.columns:
+        dfs.append(df_ec_load[['forecast_load']])
+    
+    # 2. Generation Forecast (Energy-Charts format)  
+    gen_path = raw_dir / f"gen_forecast_{market}.csv"
+    df_ec_gen = load_energy_charts_csv(gen_path, ['forecast_wind', 'forecast_solar'])
+    if df_ec_gen is not None:
+        if 'forecast_wind' in df_ec_gen.columns:
+            dfs.append(df_ec_gen[['forecast_wind']])
+        if 'forecast_solar' in df_ec_gen.columns:
+            dfs.append(df_ec_gen[['forecast_solar']])
+    
+    # If Energy-Charts format worked, return early
+    if dfs:
+        df = pd.concat(dfs, axis=1)
+        df = df.sort_index()
+        mask = (df.index >= pd.Timestamp(start_date, tz='UTC')) & (df.index <= pd.Timestamp(end_date, tz='UTC') + pd.Timedelta(days=1))
+        df = df[mask]
+        df = df.apply(pd.to_numeric, errors='coerce')
+        return df
+    
+    # Fallback to ENTSO-E format parsing
+    # 1. Load Forecast (ENTSO-E format)
+    df_load = load_entsoe_csv(load_path)
+    if df_load is not None:
+        # Prefer "Total Load Forecast"
+        load_col = next((c for c in df_load.columns if "forecast" in c.lower() and "load" in c.lower()), None)
+        if not load_col:
+             # Fallback
+             load_col = next((c for c in df_load.columns if "load" in c.lower() and "actual" not in c.lower()), None)
+        
+        if load_col:
+            dfs.append(df_load[[load_col]].rename(columns={load_col: "forecast_load"}))
+    
+    # 2. Gen Forecast
+    gen_path = raw_dir / f"gen_forecast_{market}.csv"
+    df_gen = load_entsoe_csv(gen_path)
+    if df_gen is not None:
+        # Solar
+        solar_col = next((c for c in df_gen.columns if "solar" in c.lower()), None)
+        if solar_col:
+            dfs.append(df_gen[[solar_col]].rename(columns={solar_col: "forecast_solar"}))
+            
+        # Wind (Sum)
+        wind_cols = [c for c in df_gen.columns if "wind" in c.lower()]
+        if wind_cols:
+            wind_sum = df_gen[wind_cols].apply(pd.to_numeric, errors='coerce').sum(axis=1)
+            dfs.append(wind_sum.to_frame("forecast_wind"))
+            
+    if not dfs:
+        return None
+        
+    df = pd.concat(dfs, axis=1)
+    
+    # Filter
+    df = df.sort_index()
+    mask = (df.index >= pd.Timestamp(start_date)) & (df.index <= pd.Timestamp(end_date) + pd.Timedelta(days=1))
+    df = df[mask]
+    
+    # Ensure numeric
+    df = df.apply(pd.to_numeric, errors='coerce')
     
     return df
 

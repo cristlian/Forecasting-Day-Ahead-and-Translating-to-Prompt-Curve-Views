@@ -57,6 +57,16 @@ def _get_sample_module():
         return load_sample_features
 
 
+def _get_local_loader():
+    """Import local loader module."""
+    try:
+        from ..data.local_loader import load_local_features
+        return load_local_features
+    except ImportError:
+        from data.local_loader import load_local_features
+        return load_local_features
+
+
 def _get_models_modules():
     """Import model modules handling both relative and absolute imports."""
     try:
@@ -114,27 +124,39 @@ def load_features(
     Load feature data for training.
     
     Priority:
-    1. If use_sample: generate/load sample data
-    2. If cache_only: load from cache (error if not found)
-    3. Otherwise: try cache first, then error
+    1. If use_sample: generate/load sample data (for testing only)
+    2. Try local raw data files (data/raw/*.csv)
+    3. Try cached features (data/features/)
+    4. If cache_only and nothing found: error
     
     Args:
         paths: PathBuilder instance
         cache_only: Only use cached data
-        use_sample: Use synthetic sample data
+        use_sample: Use synthetic sample data (testing only)
         run_id: Specific run ID to load
     
     Returns:
         Tuple of (features DataFrame, source description)
     
     Raises:
-        CacheMissingError: If cache_only but no cache found
+        CacheMissingError: If no data available
     """
     if use_sample:
         load_sample_features = _get_sample_module()
         logger.info("Loading sample features (synthetic data for offline testing)")
         df = load_sample_features(paths.root)
         return df, "sample"
+    
+    # Try local raw data first (primary source)
+    try:
+        load_local_features = _get_local_loader()
+        df, source = load_local_features(paths.root)
+        logger.info(f"Loaded {len(df)} rows from local raw data")
+        return df, source
+    except FileNotFoundError as e:
+        logger.debug(f"Local raw data not found: {e}")
+    except Exception as e:
+        logger.warning(f"Error loading local raw data: {e}")
     
     # Try to find cached features
     cache_path = find_features_cache(paths, run_id)
@@ -147,16 +169,16 @@ def load_features(
     if cache_only:
         raise CacheMissingError(
             "No cached features found. Options:\n"
-            "  1. Run full pipeline first: python -m src.pipeline.cli run --start-date ... --end-date ...\n"
-            "  2. Use sample data: python -m src.pipeline.cli train --use-sample\n"
-            "  3. Set ENTSOE_API_KEY and run without --cache-only"
+            "  1. Ensure raw data files exist in data/raw/\n"
+            "  2. Run full pipeline first: python -m pipeline run --start-date ... --end-date ...\n"
+            "  3. Use sample data: python -m pipeline train --use-sample"
         )
     
     raise CacheMissingError(
-        "No features available. Run the ingestion pipeline first or use --use-sample:\n"
-        "  python -m src.pipeline.cli run --start-date 2024-01-01 --end-date 2024-12-31\n"
-        "  OR\n"
-        "  python -m src.pipeline.cli train --use-sample"
+        "No features available. Ensure raw data exists in data/raw/ or run:\n"
+        "  python -m pipeline run --start-date 2024-01-01 --end-date 2024-12-31\n"
+        "  OR for testing:\n"
+        "  python -m pipeline train --use-sample"
     )
 
 

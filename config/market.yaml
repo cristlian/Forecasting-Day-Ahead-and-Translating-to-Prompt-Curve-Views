@@ -39,8 +39,8 @@ drivers:
 
 # Data sources
 data_sources:
-  primary: "entsoe"  # ENTSO-E Transparency Platform
-  fallback: "smard"  # SMARD.de (Bundesnetzagentur) - no token required
+  primary: "energy_charts"  # Energy-Charts API (Fraunhofer ISE) - no token required
+  fallback: "entsoe"  # ENTSO-E Transparency Platform (requires API key)
   
 # Training/validation split
 split:

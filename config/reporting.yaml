@@ -7,9 +7,9 @@ output_paths:
   final_report: "report/report.md"
   
 llm_settings:
-  enabled: false  # set to true if you have API keys
-  provider: "openai"  # or "anthropic"
-  model: "gpt-4"
+  enabled: true          # Set to true
+  provider: "gemini"     # Changed from "openai"
+  model: "gemini-2.0-flash"  # Current available model
   max_tokens: 2000
   temperature: 0.3
   
