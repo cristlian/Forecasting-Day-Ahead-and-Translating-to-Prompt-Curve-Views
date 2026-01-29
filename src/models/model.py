@@ -4,7 +4,7 @@ import logging
 import json
 from pathlib import Path
 from typing import Dict, Optional, List, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 import pandas as pd
 import numpy as np
 
@@ -382,7 +382,7 @@ def save_model_results(
     metrics_with_meta = {
         "model": f"improved_{model.model_type}",
         "run_id": run_id,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "metrics": metrics,
     }
     

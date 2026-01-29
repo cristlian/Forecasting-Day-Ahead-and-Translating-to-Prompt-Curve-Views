@@ -7,7 +7,7 @@ This allows running the full pipeline without API keys.
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ def generate_sample_features(
     np.random.seed(seed)
     
     if start_date is None:
-        end_date = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        end_date = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         start_date = end_date - timedelta(days=n_days)
     elif end_date is None:
         end_date = start_date + timedelta(days=n_days)

@@ -4,7 +4,7 @@ import logging
 import json
 from pathlib import Path
 from typing import Dict, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 import pandas as pd
 import numpy as np
 
@@ -212,7 +212,7 @@ def save_baseline_results(
     metrics_with_meta = {
         "model": "baseline_naive_seasonal",
         "run_id": run_id,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "metrics": metrics,
     }
     

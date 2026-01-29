@@ -74,8 +74,8 @@ def run_qa_pipeline(
     results = run_all_checks(df, config)
     
     # Generate reports
-    from datetime import datetime
-    timestamp = datetime.utcnow()
+    from datetime import datetime, timezone
+    timestamp = datetime.now(timezone.utc)
     generate_qa_report(results, output_dir, run_id, timestamp)
     
     # Evaluate gate

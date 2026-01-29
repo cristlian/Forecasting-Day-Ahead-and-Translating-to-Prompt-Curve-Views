@@ -3,7 +3,7 @@
 import logging
 import json
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -145,7 +145,7 @@ def run_validation(
     target_col = config.get("market", {}).get("target", {}).get("column", "day_ahead_price")
 
     if validation_date is None:
-        validation_dt = datetime.utcnow()
+        validation_dt = datetime.now(timezone.utc)
     else:
         validation_dt = datetime.strptime(validation_date, "%Y-%m-%d")
 

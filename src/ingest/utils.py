@@ -3,7 +3,7 @@
 import time
 import logging
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Callable, Any, Optional
 from functools import wraps
 from pathlib import Path
@@ -108,7 +108,7 @@ def handle_dst(df: pd.DataFrame, policy: dict) -> pd.DataFrame:
 def generate_run_id(market: str, timestamp: Optional[datetime] = None) -> str:
     """Generate a unique run ID."""
     if timestamp is None:
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
     return f"{timestamp.strftime('%Y%m%d_%H%M%S')}_{market}"
 
 

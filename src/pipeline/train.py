@@ -10,7 +10,7 @@ This module handles:
 import logging
 import json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple, Any
 import pandas as pd
 
@@ -375,7 +375,7 @@ def generate_validation_report(
         f"# Model Validation Report",
         f"",
         f"**Run ID:** {run_id}",
-        f"**Generated:** {datetime.utcnow().isoformat()}Z",
+        f"**Generated:** {datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')}",
         f"",
         f"## Metrics Comparison",
         f"",

@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict
 
@@ -30,7 +30,7 @@ def generate_qa_report(
         Tuple of (json_path, md_path)
     """
     if timestamp is None:
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
     
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

@@ -17,7 +17,7 @@ This is Step 9 of the pipeline - "Agent-based workflow development"
 import logging
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional, Any
 import pandas as pd
@@ -100,7 +100,7 @@ def generate_morning_signal(
     
     # Package result
     result = {
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "market": market,
         "period": f"{signals_df.index.min()} to {signals_df.index.max()}",
         "strategy": strategy,
@@ -303,18 +303,16 @@ def _get_api_key(provider: str) -> Optional[str]:
 def _call_gemini_agent(prompt: str, config: Dict, api_key: str) -> str:
     """Call Gemini API with Senior Trader persona."""
     try:
-        import google.generativeai as genai
+        from google import genai
+        from google.genai import types
         
-        genai.configure(api_key=api_key)
+        client = genai.Client(api_key=api_key)
         
-        model = genai.GenerativeModel(
-            model_name=config.get("model", "gemini-2.0-flash"),
-            system_instruction=SENIOR_TRADER_SYSTEM_PROMPT,
-        )
-        
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.GenerationConfig(
+        response = client.models.generate_content(
+            model=config.get("model", "gemini-2.5-flash"),
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=SENIOR_TRADER_SYSTEM_PROMPT,
                 max_output_tokens=config.get("max_tokens", 500),
                 temperature=config.get("temperature", 0.3),
             )
@@ -423,7 +421,7 @@ def _save_agent_outputs(result: Dict, output_dir: Path):
     """Save agent outputs to files."""
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     
     # Save JSON with full context
     json_path = output_dir / f"morning_signal_{timestamp}.json"
