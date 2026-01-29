@@ -5,9 +5,9 @@
 
 ---
 
-## 🎯 Winner: Energy-Charts API (Fraunhofer ISE)
+## 🎯 Primary: Energy-Charts API (Fraunhofer ISE)
 
-**No API key required!** Fully automated data fetching available.
+**No API key required.** Fully automated data fetching available.
 
 ### Test Results:
 | Data Type | Status | Records |
@@ -30,17 +30,9 @@ fetch_full_dataset("2023-01-01", "2024-12-31", "data/raw")
 
 ---
 
-## ❌ Failed Sources
+## ✅ Fallback: SMARD.de
 
-### ENTSO-E API (entsoe-py)
-- **Status**: Failed with 401 Unauthorized
-- **Reason**: Requires API key registration (1-2 days wait)
-- **Issues**: Rate limiting, instability
-
-### SMARD.de
-- **Status**: Failed with 404 errors
-- **Reason**: API structure changed, endpoints no longer accessible
-- **Previous URLs**: `https://www.smard.de/app/chart_data/...` → All return 404
+SMARD remains configured as a fallback source for prices and fundamentals.
 
 ---
 

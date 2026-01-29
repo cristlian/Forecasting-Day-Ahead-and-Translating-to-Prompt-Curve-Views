@@ -6,7 +6,7 @@
 - [x] Scope freeze normalized into configs (market.yaml, schema.yaml, features.yaml)
 - [x] docs/00_scope.md updated with DE-LU market details
 - [x] **Data Source**: Energy-Charts API (Fraunhofer ISE) - No API key required!
-- [x] Ingestion module (src/ingest/) with Energy-Charts + ENTSO-E fallback
+- [x] Ingestion module (src/ingest/) with Energy-Charts + SMARD fallback
 - [x] QA gate (src/qa/) with checks and report generation
 - [x] Feature pipeline (src/features/) with leakage-safe design
 - [x] Pipeline wiring (src/pipeline/) with CLI
@@ -89,13 +89,9 @@ python -m pipeline train --cache-only
 # This will fail with helpful message if no cache exists
 ```
 
-### Full Pipeline (Requires ENTSOE_API_KEY or Uses SMARD Fallback)
+### Full Pipeline (Uses Local Raw Data or SMARD Fallback)
 
 ```bash
-# Set API key (optional - will use SMARD fallback if not set)
-export ENTSOE_API_KEY='your-key-here'  # Linux/Mac
-$env:ENTSOE_API_KEY='your-key-here'    # PowerShell
-
 # Run full pipeline (ingestion -> QA -> features)
 python -m pipeline run --start-date 2024-01-01 --end-date 2024-12-31
 
@@ -122,9 +118,9 @@ pytest tests/test_trading_agent.py -v
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `ENTSOE_API_KEY` | No* | ENTSO-E Transparency Platform API for fresh data |
 | `OPENAI_API_KEY` | No | LLM commentary generation (optional) |
 | `ANTHROPIC_API_KEY` | No | LLM commentary generation (optional) |
+| `GEMINI_API_KEY` | No | LLM commentary generation (optional) |
 
 \* Not required when using `--use-sample` or `--cache-only` modes.
 

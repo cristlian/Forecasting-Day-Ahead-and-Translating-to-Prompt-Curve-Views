@@ -43,7 +43,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    # Run full pipeline (ingestion -> QA -> features) - requires API key or cache
+    # Run full pipeline (ingestion -> QA -> features)
     python -m pipeline run --start-date 2024-01-01 --end-date 2024-01-31
 
     # Train models using cached features (no API key needed)
@@ -62,9 +62,7 @@ Examples:
     python -m pipeline validate --date 2026-01-29 --use-sample
 
 Environment Variables (OPTIONAL):
-  ENTSOE_API_KEY    API key for ENTSO-E Transparency Platform
-                    Get your key at: https://transparency.entsoe.eu/
-                    NOT required for --cache-only or --use-sample modes
+    No API keys are required for ingestion when using local raw data or SMARD.
         """
     )
     
@@ -307,20 +305,6 @@ def _handle_run(args, logger) -> int:
     
     market = config.get("market", {}).get("market", {}).get("code", "unknown")
     logger.info(f"Market: {market}")
-    
-    # Check for API key
-    import os
-    api_key = os.environ.get("ENTSOE_API_KEY")
-    if not api_key and not args.skip_ingest:
-        logger.warning(
-            "⚠️  ENTSOE_API_KEY not set. Will attempt to use cached data or SMARD fallback."
-        )
-        logger.warning(
-            "   Get your API key at: https://transparency.entsoe.eu/"
-        )
-        logger.warning(
-            "   Or use --skip-ingest if you have cached data."
-        )
     
     # Run pipeline
     result = run_pipeline(
@@ -602,11 +586,16 @@ def _handle_agent(args, logger) -> int:
         output_dir=output_dir,
     )
     
-    # Print strategy
+    # Print strategy (handle encoding for Windows)
     logger.info("-" * 60)
     logger.info("📊 MORNING EXECUTION STRATEGY")
     logger.info("-" * 60)
-    print("\n" + result["strategy"] + "\n")
+    try:
+        print("\n" + result["strategy"] + "\n")
+    except UnicodeEncodeError:
+        # Fallback for Windows terminals that can't handle € symbol
+        safe_strategy = result["strategy"].replace("€", "EUR ")
+        print("\n" + safe_strategy + "\n")
     
     logger.info(f"✅ Signal saved to: {output_dir / 'LATEST_MORNING_SIGNAL.md'}")
     

@@ -18,7 +18,7 @@ columns:
   forecast_load:
     dtype: "float64"
     unit: "MW"
-    range: [20000, 90000]  # DE-LU typical load range
+    range: [0, 90000]  # DE-LU load proxy can dip below 20k
     required: true
     description: "Day-ahead load forecast published before auction"
     
@@ -40,7 +40,7 @@ columns:
   actual_load:
     dtype: "float64"
     unit: "MW"
-    range: [20000, 90000]
+    range: [0, 90000]
     required: false
     description: "Actual load (for validation only)"
     

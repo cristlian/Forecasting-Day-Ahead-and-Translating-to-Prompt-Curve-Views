@@ -39,13 +39,6 @@ ENV/
 /data/
 /outputs/
 /models/
-reports/qa/
-reports/metrics/
-reports/validation/
-reports/trading/
-reports/commentary/
-reports/llm_logs/
-reports/figures/
 
 # OS
 .DS_Store

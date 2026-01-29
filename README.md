@@ -5,7 +5,7 @@
 This project builds a prototype that produces a daily fair-value view for a European power market and demonstrates how this view informs prompt curve positioning.
 
 **Case Study Theme:** European Power Fair Value Forecasting  
-**Target Market:** [DE/FR/NL/GB - To be specified]  
+**Target Market:** DE-LU (Germany/Luxembourg)  
 **Objective:** Forecast day-ahead power prices and translate forecasts into tradable curve views
 
 ---
@@ -46,28 +46,27 @@ This project builds a prototype that produces a daily fair-value view for a Euro
 
 ```
 .
-├── data/                      # Raw and processed data
-│   ├── raw/                   # Original datasets
-│   └── processed/             # Cleaned and transformed data
-├── notebooks/                 # Jupyter notebooks for exploration
-│   ├── 01_data_ingestion.ipynb
-│   ├── 02_eda.ipynb
-│   ├── 03_modeling.ipynb
-│   └── 04_evaluation.ipynb
-├── src/                       # Source code
-│   ├── data/                  # Data processing modules
-│   ├── models/                # Model implementations
-│   ├── utils/                 # Utility functions
-│   └── ai_integration/        # AI/LLM components
-├── outputs/                   # Generated outputs
-│   ├── figures/               # Visualizations
-│   ├── tables/                # Results tables
-│   └── qa_reports/            # Quality assurance reports
-├── docs/                      # Documentation
-│   └── trading_guidance.md    # Prompt curve translation guide
+├── config/                    # YAML configs for market/model/reporting
+├── data/                      # Raw + cached + engineered data
+│   ├── raw/                   # Input CSVs (Energy-Charts/SMARD)
+│   ├── clean/                 # QA-passed datasets
+│   ├── features/              # Feature matrices
+│   └── cache/                 # Ingestion cache
+├── docs/                      # Design + source documentation
+├── models/                    # Trained model artifacts
+├── outputs/                   # Predictions and signals
+├── reports/                   # QA, metrics, validation, trading outputs
+├── report/                    # Final submission report
+├── scripts/                   # Helper scripts (trading step, batch runs)
+├── src/                       # Pipeline source code
+│   ├── ingest/                # Data ingestion (Energy-Charts/SMARD)
+│   ├── qa/                    # QA gates
+│   ├── features/              # Feature engineering
+│   ├── models/                # Baseline + improved models
+│   ├── trading/               # Signals + trading agent
+│   └── reporting/             # LLM commentary
 ├── tests/                     # Unit tests
 ├── requirements.txt           # Python dependencies
-├── submission.csv             # Out-of-sample predictions (optional)
 └── README.md                  # This file
 ```
 
@@ -76,7 +75,7 @@ This project builds a prototype that produces a daily fair-value view for a Euro
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Python 3.8+
+- Python 3.14.0
 - pip or conda package manager
 
 ### Installation
@@ -116,14 +115,9 @@ python -m pipeline validate --date 2026-01-29 --use-sample
 pytest tests/ -v
 ```
 
-### Full Pipeline (With Optional API Key)
+### Full Pipeline (Using Local Raw Data or SMARD Fallback)
 
 ```bash
-# Optional: Set ENTSO-E API key for fresh data
-# If not set, will use SMARD fallback (Germany only)
-export ENTSOE_API_KEY='your-key-here'  # Linux/Mac
-$env:ENTSOE_API_KEY='your-key-here'    # PowerShell
-
 # Run full pipeline (ingestion -> QA -> features)
 python -m pipeline run --start-date 2024-01-01 --end-date 2024-06-30
 
@@ -138,7 +132,6 @@ python -m pipeline validate --date 2026-01-29 --cache-only
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ENTSOE_API_KEY` | No | ENTSO-E API key for data ingestion. Not needed for `--use-sample` or `--cache-only`. Get key at: https://transparency.entsoe.eu/ |
 | `OPENAI_API_KEY` | No | For LLM commentary (optional feature) |
 | `ANTHROPIC_API_KEY` | No | For LLM commentary (optional feature) |
 | `GEMINI_API_KEY` | No | For LLM commentary (optional feature) |
@@ -150,10 +143,10 @@ See `.env.example` for full list.
 ## 📊 Data Sources
 
 ### Power Market Data
-- **Day-Ahead Prices:** ENTSO-E Transparency Platform / SMARD.de (fallback)
-- **Load Forecasts:** ENTSO-E / SMARD
-- **Wind Generation Forecasts:** ENTSO-E / SMARD
-- **Solar Generation Forecasts:** ENTSO-E / SMARD
+- **Day-Ahead Prices:** Energy-Charts API (primary) / SMARD.de (fallback)
+- **Load Forecasts:** Energy-Charts / SMARD
+- **Wind Generation Forecasts:** Energy-Charts / SMARD
+- **Solar Generation Forecasts:** Energy-Charts / SMARD
 
 ### Data Quality Checks
 - Missing value detection and handling
@@ -191,7 +184,7 @@ All features are designed to be available before the D+1 auction (12:00 CET):
 
 ## 💹 Trading Application
 
-See [Trading Guidance](docs/trading_guidance.md) for detailed explanation of:
+See [reports/trading/guidance.md](reports/trading/guidance.md) for detailed explanation of:
 - How forecasts translate to curve positions
 - Signal generation methodology
 - Risk management considerations
@@ -244,7 +237,7 @@ pytest tests/
 
 - **Main Document:** [Link to 1-3 page PDF/Markdown submission]
 - **Code Documentation:** Inline comments and docstrings
-- **Trading Guidance:** See `docs/trading_guidance.md`
+- **Trading Guidance:** See [reports/trading/guidance.md](reports/trading/guidance.md)
 
 ---
 

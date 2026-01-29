@@ -186,26 +186,22 @@ def _call_anthropic(prompt: str, config: Dict, api_key: str) -> str:
 
 
 def _call_gemini(prompt: str, config: Dict, api_key: str) -> str:
-    """Call Google Gemini API using the new google-genai package."""
+    """Call Google Gemini API using google-generativeai."""
     try:
-        from google import genai
-        from google.genai import types
+        import google.generativeai as genai
         
-        client = genai.Client(api_key=api_key)
-        
-        response = client.models.generate_content(
-            model=config["model"],
-            contents=prompt,
-            config=types.GenerateContentConfig(
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(model_name=config["model"])
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.GenerationConfig(
                 max_output_tokens=config["max_tokens"],
                 temperature=config["temperature"],
             )
         )
-        
         return response.text
-    
     except ImportError:
-        logger.error("google-genai package not installed. Install with: pip install google-genai")
+        logger.error("google-generativeai package not installed. Install with: pip install google-generativeai")
         return "Gemini package not available"
     except Exception as e:
         logger.error(f"Gemini API error: {e}")

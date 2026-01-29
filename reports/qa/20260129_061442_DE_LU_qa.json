@@ -1,0 +1,120 @@
+{
+  "run_id": "20260129_061442_DE_LU",
+  "timestamp": "2026-01-29T06:14:44.572045",
+  "overall_pass": false,
+  "summary": {
+    "total_checks": 7,
+    "passed": 5,
+    "failed": 2,
+    "total_errors": 5,
+    "total_warnings": 8
+  },
+  "checks": [
+    {
+      "name": "Completeness Check",
+      "passed": false,
+      "errors": [
+        "Column 'day_ahead_price' has 49.13% missing (8145 rows), threshold: 1.0%",
+        "Column 'forecast_load' has 95.70% missing (15867 rows), threshold: 1.0%",
+        "Column 'forecast_wind' has 95.67% missing (15862 rows), threshold: 1.0%",
+        "Column 'forecast_solar' has 95.67% missing (15862 rows), threshold: 1.0%"
+      ],
+      "warnings": [],
+      "metrics": {
+        "day_ahead_price_missing_pct": 49.125452352231605,
+        "forecast_load_missing_pct": 95.69963811821471,
+        "forecast_wind_missing_pct": 95.66948130277443,
+        "forecast_solar_missing_pct": 95.66948130277443
+      }
+    },
+    {
+      "name": "Duplicate Check",
+      "passed": true,
+      "errors": [],
+      "warnings": [],
+      "metrics": {
+        "duplicate_count": "0"
+      }
+    },
+    {
+      "name": "Range Check",
+      "passed": false,
+      "errors": [
+        "Column 'forecast_load': 10 values (1.40%) out of range [0, 90000] (actual range: [-6676.05, 59892.45])"
+      ],
+      "warnings": [],
+      "metrics": {
+        "day_ahead_price_out_of_range_pct": 0.0,
+        "day_ahead_price_min": -500.0,
+        "day_ahead_price_max": 820.11,
+        "forecast_load_out_of_range_pct": 1.402524544179523,
+        "forecast_load_min": -6676.05,
+        "forecast_load_max": 59892.45,
+        "forecast_wind_out_of_range_pct": 0.0,
+        "forecast_wind_min": 974.475,
+        "forecast_wind_max": 39925.75,
+        "forecast_solar_out_of_range_pct": 0.0,
+        "forecast_solar_min": 0.0,
+        "forecast_solar_max": 39437.725
+      }
+    },
+    {
+      "name": "Temporal Check",
+      "passed": true,
+      "errors": [],
+      "warnings": [],
+      "metrics": {
+        "max_gap_hours": 1.0,
+        "gap_count": 0,
+        "irregular_intervals": "0"
+      }
+    },
+    {
+      "name": "Hourly Continuity Check",
+      "passed": true,
+      "errors": [],
+      "warnings": [
+        "Date 2022-12-31 has 1 hours (expected 23-25)",
+        "Date 2024-11-21 has 19 hours (expected 23-25)"
+      ],
+      "metrics": {
+        "days_with_24h": "690",
+        "days_with_23h": "0",
+        "days_with_25h": "0",
+        "days_with_other": 2
+      }
+    },
+    {
+      "name": "Alignment Check",
+      "passed": true,
+      "errors": [],
+      "warnings": [
+        "forecast_load: 8138 rows (96.5%) missing where price exists",
+        "forecast_wind: 8135 rows (96.4%) missing where price exists",
+        "forecast_solar: 8135 rows (96.4%) missing where price exists",
+        "Only 1.8% of rows have all data"
+      ],
+      "metrics": {
+        "forecast_load_misaligned_pct": 96.47895672791938,
+        "forecast_wind_misaligned_pct": 96.443390634262,
+        "forecast_solar_misaligned_pct": 96.443390634262,
+        "fully_aligned_pct": 1.7913148371531966
+      }
+    },
+    {
+      "name": "Outlier Check",
+      "passed": true,
+      "errors": [],
+      "warnings": [
+        "Found 4 price outliers (|z| > 10)",
+        "Extreme prices: [820.11, 805.08, 656.37]"
+      ],
+      "metrics": {
+        "price_outlier_count": "4",
+        "forecast_load_outlier_count": "0",
+        "forecast_wind_outlier_count": "0",
+        "forecast_solar_outlier_count": "0"
+      }
+    }
+  ]
+}

@@ -26,44 +26,30 @@ This will create:
 
 ---
 
-## Alternative: Manual Download (ENTSO-E)
+## Alternative: Manual Download (SMARD)
 
-If you prefer manual download from ENTSO-E Transparency Platform:
+If you prefer manual download from SMARD.de (Bundesnetzagentur):
 
 ### 1. Setup
 1. Create a `data/raw` directory in your project root if it doesn't exist.
 2. Store all downloaded CSV files in this folder.
 
 ### 2. Download Day-Ahead Prices
-**⚠️ IMPORTANT**: Day-Ahead Prices are NOT in the Transmission tab, they are in the **Market** tab!
+1. Go to **SMARD** > Day-Ahead Prices (module 8004004).
+2. Select Germany/Luxembourg (DE-LU) and the date range.
+3. Export CSV and rename to: `prices_DE_LU.csv`
+4. Place it in `data/raw/`.
 
-1. Go to **Market** > **Day-ahead Prices**.
-2. Select:
-   - **Bidding Zone**: `DE-LU` (Germany/Luxembourg)
-   - **Date Range**: `01.01.2023` to `31.12.2024` (or your full range)
-   - **Note**: Max date range is 7 days, so you'll need to download multiple files and combine them
-3. Click **Export** > **CSV**.
-4. If downloading multiple files, combine them into one CSV file.
-5. Rename the final file to: `prices_DE_LU.csv`
-6. Place it in `data/raw/`.
+### 3. Download Load Forecast
+1. Go to **SMARD** > Forecasted Grid Load (module 4065).
+2. Export CSV and rename to: `load_DE_LU.csv`
+3. Place it in `data/raw/`.
 
-## 3. Download Load Forecast
-1. Go to **Load** > **Total Load - Day Ahead / Actual**.
-2. Select:
-   - **Bidding Zone**: `DE-LU`
-   - **Date Range**: `01.01.2023` to `31.12.2024`
-3. Click **Export** > **CSV**.
-4. Rename the file to: `load_DE_LU.csv`
-5. Place it in `data/raw/`.
-
-## 4. Download Wind and Solar Forecast
-1. Go to **Generation** > **Wind and Solar Generation Forecast**.
-2. Select:
-   - **Bidding Zone**: `DE-LU`
-   - **Date Range**: `01.01.2023` to `31.12.2024`
-3. Click **Export** > **CSV**.
-4. Rename the file to: `gen_forecast_DE_LU.csv`
-5. Place it in `data/raw/`.
+### 4. Download Wind and Solar Forecast
+1. Go to **SMARD** > Wind Onshore Forecast (module 4067) and Wind Offshore Forecast (module 4068).
+2. Go to **SMARD** > Solar Forecast (module 4069).
+3. Export and merge into a single CSV with columns `forecast_wind` and `forecast_solar`.
+4. Rename the final file to: `gen_forecast_DE_LU.csv` and place it in `data/raw/`.
 
 ## Integration
-The system is now configured to automatically look for these files in `data/raw/` before attempting to use the API.
+The system is now configured to automatically look for these files in `data/raw/` before attempting any online fallback.

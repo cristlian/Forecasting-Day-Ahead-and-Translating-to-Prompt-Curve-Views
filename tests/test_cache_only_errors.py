@@ -140,7 +140,7 @@ class TestAPIKeyIndependence:
     def test_no_env_vars_needed_for_sample_training(self, monkeypatch):
         """Test that training with sample data doesn't require any env vars."""
         # Clear all potentially relevant environment variables
-        for var in ["ENTSOE_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"]:
+        for var in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"]:
             monkeypatch.delenv(var, raising=False)
         
         from data.sample import generate_sample_features
@@ -161,7 +161,7 @@ class TestAPIKeyIndependence:
     def test_config_loading_no_api_required(self, monkeypatch):
         """Test that config loading doesn't require API keys."""
         # Clear environment variables
-        for var in ["ENTSOE_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"]:
+        for var in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"]:
             monkeypatch.delenv(var, raising=False)
         
         from pipeline.config import load_config

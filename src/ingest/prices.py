@@ -9,8 +9,6 @@ import pandas as pd
 
 from .utils import (
     retry_on_failure,
-    get_entsoe_api_key,
-    get_area_code,
     to_utc,
     handle_dst,
     load_from_cache,
@@ -36,7 +34,7 @@ def fetch_day_ahead_prices(
     force_refresh: bool = False,
 ) -> pd.DataFrame:
     """
-    Fetch day-ahead electricity prices from ENTSO-E or cache.
+    Fetch day-ahead electricity prices from local files, SMARD, or cache.
     
     Args:
         market: Market code (e.g., 'DE_LU')
@@ -59,7 +57,22 @@ def fetch_day_ahead_prices(
         cache_path = get_cache_path(cache_dir, market, "prices", start_date, end_date)
         cached = load_from_cache(cache_path)
         if cached is not None:
-            return cached
+            tz = config.get("market", {}).get("timezone", "Europe/Berlin")
+            start_ts = pd.Timestamp(start_date, tz=tz).tz_convert("UTC")
+            end_ts = (pd.Timestamp(end_date, tz=tz) + pd.Timedelta(days=1)).tz_convert("UTC")
+            cached = cached[(cached.index >= start_ts) & (cached.index < end_ts)]
+            max_missing = (
+                config.get("qa_thresholds", {})
+                .get("completeness", {})
+                .get("max_missing_pct", {})
+                .get("critical_columns", 1.0)
+            )
+            missing_pct = cached["day_ahead_price"].isna().mean() * 100 if len(cached) else 100.0
+            if missing_pct <= max_missing:
+                return cached
+            logger.warning(
+                f"Cached prices missing {missing_pct:.2f}% (> {max_missing}%). Will refetch via SMARD."
+            )
     
     # Try local file in data/raw (Manual Download)
     if cache_dir:
@@ -70,24 +83,40 @@ def fetch_day_ahead_prices(
                 logger.info(f"Successfully loaded {len(df)} price records from local file")
                 # Normalize immediately as it's raw data
                 df = normalize_prices(df, config)
-                if cache_dir:
-                    save_to_cache(df, cache_path)
-                return df
+
+                # Filter to requested range (UTC)
+                tz = config.get("market", {}).get("timezone", "Europe/Berlin")
+                start_ts = pd.Timestamp(start_date, tz=tz).tz_convert("UTC")
+                end_ts = (pd.Timestamp(end_date, tz=tz) + pd.Timedelta(days=1)).tz_convert("UTC")
+                df = df[(df.index >= start_ts) & (df.index < end_ts)]
+
+                max_missing = (
+                    config.get("qa_thresholds", {})
+                    .get("completeness", {})
+                    .get("max_missing_pct", {})
+                    .get("critical_columns", 1.0)
+                )
+                missing_pct = df["day_ahead_price"].isna().mean() * 100 if len(df) else 100.0
+                if missing_pct <= max_missing:
+                    if cache_dir:
+                        save_to_cache(df, cache_path)
+                    return df
+                logger.warning(
+                    f"Local price data missing {missing_pct:.2f}% (> {max_missing}%). Falling back to SMARD."
+                )
         except Exception as e:
             logger.warning(f"Local file load failed: {e}")
 
-    # Try ENTSO-E API
-    api_key = get_entsoe_api_key()
+    # Try Energy-Charts API
     df = None
-    
-    if api_key:
-        try:
-            df = _fetch_from_entsoe(market, start_date, end_date, api_key, config)
-            logger.info(f"Successfully fetched {len(df)} price records from ENTSO-E")
-        except Exception as e:
-            logger.warning(f"ENTSO-E fetch failed: {e}")
-    
-    # Fallback to SMARD if ENTSO-E fails
+    logger.info("Attempting Energy-Charts API...")
+    try:
+        df = _fetch_from_energy_charts(start_date, end_date)
+        logger.info(f"Successfully fetched {len(df)} price records from Energy-Charts")
+    except Exception as e:
+        logger.warning(f"Energy-Charts fetch failed: {e}")
+
+    # Fallback to SMARD if Energy-Charts fails
     if df is None:
         logger.info("Attempting SMARD fallback...")
         try:
@@ -105,15 +134,33 @@ def fetch_day_ahead_prices(
             if existing_caches:
                 latest_cache = max(existing_caches, key=lambda p: p.stat().st_mtime)
                 logger.warning(f"Using stale cache: {latest_cache}")
-                return pd.read_parquet(latest_cache)
+                df_stale = pd.read_parquet(latest_cache)
+                max_missing = (
+                    config.get("qa_thresholds", {})
+                    .get("completeness", {})
+                    .get("max_missing_pct", {})
+                    .get("critical_columns", 1.0)
+                )
+                missing_pct = df_stale["day_ahead_price"].isna().mean() * 100 if len(df_stale) else 100.0
+                if missing_pct <= max_missing:
+                    return df_stale
+                logger.error(
+                    f"Stale cache missing {missing_pct:.2f}% (> {max_missing}%)."
+                )
         
         raise PriceIngestionError(
             f"Failed to fetch prices for {market}. "
-            f"Set ENTSOE_API_KEY environment variable or provide cached data in {cache_dir}"
+            f"Provide local raw data in {cache_dir.parent / 'raw'} or cached data in {cache_dir}"
         )
     
     # Normalize and cache
     df = normalize_prices(df, config)
+
+    # Filter to requested range (UTC)
+    tz = config.get("market", {}).get("timezone", "Europe/Berlin")
+    start_ts = pd.Timestamp(start_date, tz=tz).tz_convert("UTC")
+    end_ts = (pd.Timestamp(end_date, tz=tz) + pd.Timedelta(days=1)).tz_convert("UTC")
+    df = df[(df.index >= start_ts) & (df.index < end_ts)]
     
     if cache_dir:
         cache_path = get_cache_path(cache_dir, market, "prices", start_date, end_date)
@@ -123,39 +170,39 @@ def fetch_day_ahead_prices(
 
 
 @retry_on_failure(max_attempts=3, delay=2.0, backoff=2.0)
-def _fetch_from_entsoe(
-    market: str,
+def _fetch_from_energy_charts(
     start_date: datetime,
     end_date: datetime,
-    api_key: str,
-    config: Dict[str, Any],
 ) -> pd.DataFrame:
-    """Fetch prices from ENTSO-E Transparency Platform."""
-    try:
-        from entsoe import EntsoePandasClient
-    except ImportError:
-        raise ImportError(
-            "entsoe-py not installed. Install with: pip install entsoe-py"
-        )
-    
-    client = EntsoePandasClient(api_key=api_key)
-    area_code = get_area_code(market, config)
-    
-    # ENTSO-E requires timezone-aware dates
-    tz = config.get("market", {}).get("timezone", "Europe/Berlin")
-    start = pd.Timestamp(start_date, tz=tz)
-    end = pd.Timestamp(end_date, tz=tz) + pd.Timedelta(days=1)  # Include end date
-    
-    # Fetch day-ahead prices
-    prices = client.query_day_ahead_prices(area_code, start=start, end=end)
-    
-    # Convert Series to DataFrame
-    if isinstance(prices, pd.Series):
-        df = prices.to_frame(name="day_ahead_price")
-    else:
-        df = prices.rename(columns={prices.columns[0]: "day_ahead_price"})
-    
-    df.index.name = "timestamp"
+    """Fetch prices from Energy-Charts API."""
+    import requests
+
+    base_url = "https://api.energy-charts.info/price"
+    all_parts = []
+
+    current = start_date
+    while current < end_date:
+        chunk_end = min(current + timedelta(days=30), end_date)
+        params = {
+            "bzn": "DE-LU",
+            "start": current.strftime("%Y-%m-%d"),
+            "end": chunk_end.strftime("%Y-%m-%d"),
+        }
+        response = requests.get(base_url, params=params, timeout=60)
+        response.raise_for_status()
+        data = response.json()
+
+        df = pd.DataFrame({
+            "timestamp": pd.to_datetime(data["unix_seconds"], unit="s", utc=True),
+            "day_ahead_price": data["price"],
+        }).set_index("timestamp")
+        all_parts.append(df)
+        current = chunk_end
+
+    if not all_parts:
+        raise PriceIngestionError("No data retrieved from Energy-Charts")
+
+    df = pd.concat(all_parts).sort_index().drop_duplicates()
     return df
 
 
@@ -183,7 +230,7 @@ def _fetch_from_local_file(
             
         skip_rows = 0
         if "Day-ahead Prices" in first_line:
-            skip_rows = 1  # Skip title row if present (ENTSO-E format)
+            skip_rows = 1  # Skip title row if present (legacy format)
         
         # Check if it's Energy-Charts format (timestamp,day_ahead_price)
         if 'timestamp' in first_line.lower() and 'day_ahead_price' in first_line.lower():
@@ -221,12 +268,12 @@ def _fetch_from_local_file(
     
     # Handle timestamp
     if time_col:
-        # ENTSO-E format: "dd.mm.yyyy HH:MM - dd.mm.yyyy HH:MM"
+        # Legacy format: "dd.mm.yyyy HH:MM - dd.mm.yyyy HH:MM"
         # Take start time
         try:
             if df[time_col].dtype == object and df[time_col].str.contains(" - ").any():
                  df['timestamp'] = df[time_col].str.split(" - ").str[0]
-                 # Generally ENTSO-E is DD.MM.YYYY HH:MM
+                # Generally DD.MM.YYYY HH:MM
                  df['timestamp'] = pd.to_datetime(df['timestamp'], dayfirst=True)
             else:
                  df['timestamp'] = pd.to_datetime(df[time_col], dayfirst=True)

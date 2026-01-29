@@ -4,7 +4,7 @@ Here is the step-by-step scope freeze and project plan.
 *   **Market**: **DE (Germany-Luxembourg)** selected for high renewable penetration (volatility), liquidity, and excellent public data availability.
 *   **Drivers**: **Forecasted Load**, **Forecasted Wind Generation**, **Forecasted Solar Generation**.
 *   **Option Lock**: **Option A** (Next-day hourly forecasting, 24 steps for D+1).
-*   **Primary Data Source**: **ENTSO-E Transparency Platform** (via `entsoe-py` or raw API) or **SMARD.de**.
+*   **Primary Data Source**: **Energy-Charts API (Fraunhofer ISE)** or **SMARD.de**.
 *   **AI Integration**: Programmatic generation of a "Morning Trader Note" (textual interpretation of the forecast vs. recent history).
 *   **Success Headline**: "A reproducible pipeline achieving <15% MAE relative to mean price, with a fully automated directional daily brief."
 
@@ -21,27 +21,27 @@ Here is the step-by-step scope freeze and project plan.
 *   **Decision**: **DE (Germany / DE-LU)**
 *   **Rationale**:
     1.  **Volatility**: Germany has the highest installed capacity of wind and solar in Europe, making price formation highly sensitive to fundamental weather drivers (ideal for modeling).
-    2.  **Data Quality**: The Bundesnetzagentur (SMARD) and ENTSO-E provide the most reliable, free, and granular energy data in Europe.
+    2.  **Data Quality**: Energy-Charts (Fraunhofer ISE) and SMARD provide reliable, free, and granular energy data in Europe.
     3.  **Liquidity**: It is the benchmark European power market; results are highly relevant to trading desks.
-*   **Feasibility**: Validated. `entsoe-py` library supports the DE-LU BZN (Bidding Zone) out of the box.
+*   **Feasibility**: Validated. Energy-Charts provides DE-LU hourly coverage without authentication.
 
 ### C) Driver Selection (Fundamental)
-We will use **3 fundamental drivers** sourced from ENTSO-E / SMARD. All are "Day-Ahead Forecasts" available before the price auction (12:00 CET).
+We will use **3 fundamental drivers** sourced from Energy-Charts / SMARD. All are "Day-Ahead Forecasts" available before the price auction (12:00 CET).
 
 1.  **Day-Ahead Load Forecast [MW]**
     *   *Definition*: Expected total electricity consumption for the bidding zone.
     *   *Relationship*: Positive correlation (Higher Load $\to$ Higher Price).
-    *   *Source*: ENTSO-E Transparency (Load Domain).
+    *   *Source*: Energy-Charts (load proxy) or SMARD.
 
 2.  **Day-Ahead Wind Generation Forecast [MW]**
     *   *Definition*: Aggregated Onshore + Offshore wind forecast.
     *   *Relationship*: Negative correlation (Higher Wind $\to$ Lower Price). *Note: Can drive negative prices in DE.*
-    *   *Source*: ENTSO-E Transparency (Generation Domain).
+    *   *Source*: Energy-Charts or SMARD.
 
 3.  **Day-Ahead Solar Generation Forecast [MW]**
     *   *Definition*: Aggregated solar photovoltaic forecast.
     *   *Relationship*: Negative correlation (Higher Solar $\to$ Lower Price, specifically in peak hours 10:00–16:00).
-    *   *Source*: ENTSO-E Transparency (Generation Domain).
+    *   *Source*: Energy-Charts or SMARD.
 
 *(Note: Fuel prices like TTF Gas or EUA Carbon are fundamental but reliable daily/hourly APIs are often paid or restricted. We will omit them to satisfy the "publicly available" constraint strictly, or use a static monthly average if a proxy is found.)*
 
@@ -76,8 +76,8 @@ We will use **3 fundamental drivers** sourced from ENTSO-E / SMARD. All are "Day
 
 ### F) Submission Artifacts Checklist
 1.  **`README.md`**: Setup instructions, scope summary, and explanation of the models.
-2.  **`requirements.txt`**: List of dependencies (`pandas`, `scikit-learn`, `entsoe-py`, etc.).
-3.  **`data_ingestion.py`**: Scripts to fetch data from ENTSO-E/SMARD and save to CSV.
+2.  **`requirements.txt`**: List of dependencies (`pandas`, `scikit-learn`, etc.).
+3.  **`data_ingestion.py`**: Scripts to fetch data from Energy-Charts/SMARD and save to CSV.
 4.  **`qa_checks.py`**: Script to validate data quality (null checks, range checks).
 5.  **`model_pipeline.py`**: Training, validation, and prediction code.
 6.  **`ai_brief.py`**: Code generating the textual market note using an LLM.
@@ -85,8 +85,8 @@ We will use **3 fundamental drivers** sourced from ENTSO-E / SMARD. All are "Day
 8.  **`submission.csv`**: Format: `[datetime, predicted_price]`.
 
 ### G) Risks & Mitigations
-1.  **Risk**: ENTSO-E API token delay or downtime.
-    *   *Mitigation*: Register for a token immediately. Fallback to SMARD.de (no token required) or download manual CSV dumps for the prototype if API fails.
+1.  **Risk**: Energy-Charts or SMARD API change/downtime.
+    *   *Mitigation*: Cache raw data locally and support manual CSV downloads.
 2.  **Risk**: Negative prices (common in DE) breaking error metrics (MAPE).
     *   *Mitigation*: Use MAE/RMSE instead of MAPE. Do not use Log-transform on prices without shifting.
 3.  **Risk**: Timezone confusion (UTC vs CET/CEST).
@@ -97,7 +97,7 @@ We will use **3 fundamental drivers** sourced from ENTSO-E / SMARD. All are "Day
     *   *Mitigation*: Use a strict time-series split (Train: 2023, Test: 2024) rather than random shuffle.
 
 ### H) Next Steps (Execution Plan)
-*   **Day 1**: Get ENTSO-E API Token. Write `data_ingestion.py` to pull 2023-2024 Price, Load, Wind, Solar.
+*   **Day 1**: Write `data_ingestion.py` to pull 2023-2024 Price, Load, Wind, Solar from Energy-Charts/SMARD.
 *   **Day 2**: Clean data. Handle missing values. Visualize correlations.
 *   **Day 3**: Build Baseline Model (Persistence) + XGBoost Model. Calculate metrics.
 *   **Day 4**: Implement `ai_brief.py` (Construct a prompt string from df statistics $\to$ call LLM).

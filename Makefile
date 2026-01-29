@@ -1,4 +1,7 @@
-.PHONY: help install test run clean format lint
+.PHONY: help install test run run-date clean format lint
+
+START_DATE ?= 2024-10-01
+END_DATE ?= 2024-10-21
 
 help:
 	@echo "Available commands:"
@@ -19,15 +22,15 @@ test:
 	pytest tests/ -v --cov=src --cov-report=html
 
 run:
-	python -m pipeline.cli run
+	python -m pipeline run --start-date $(START_DATE) --end-date $(END_DATE)
 
 run-date:
-	python -m pipeline.cli run --date $(DATE)
+	python -m pipeline run --start-date $(DATE) --end-date $(DATE)
 
 clean:
-	rm -rf outputs/* reports/qa/* reports/metrics/* reports/validation/*
-	find . -type d -name "__pycache__" -exec rm -rf {} +
-	find . -type f -name "*.pyc" -delete
+	python -c "import shutil, pathlib; paths=[pathlib.Path('outputs'), pathlib.Path('reports/qa'), pathlib.Path('reports/metrics'), pathlib.Path('reports/validation')]; [shutil.rmtree(p, ignore_errors=True) for p in paths]; [p.mkdir(parents=True, exist_ok=True) for p in paths]"
+	python -c "import pathlib, shutil; [shutil.rmtree(p, ignore_errors=True) for p in pathlib.Path('.').rglob('__pycache__')]"
+	python -c "import pathlib; [p.unlink() for p in pathlib.Path('.').rglob('*.pyc')]"
 
 format:
 	black src/ tests/

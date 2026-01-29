@@ -51,8 +51,6 @@ def test_market_config_de_lu(config):
     assert "timezone" in market_config
     assert market_config["timezone"] == "Europe/Berlin"
     
-    # Check ENTSO-E area code
-    assert "entsoe_area_code" in market_config
 
 
 def test_market_has_target(config):

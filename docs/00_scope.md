@@ -5,7 +5,6 @@ Build a reproducible daily pipeline for **DE-LU (Germany-Luxembourg)** day-ahead
 
 ## Market Selection
 - **Market**: DE-LU (Germany-Luxembourg Bidding Zone)
-- **ENTSO-E Area Code**: 10Y1001A1001A82H
 - **Rationale**: High renewable penetration, excellent data quality, benchmark European market
 
 ## Target Variable
@@ -19,7 +18,7 @@ Build a reproducible daily pipeline for **DE-LU (Germany-Luxembourg)** day-ahead
 3. **Day-Ahead Solar Forecast** [MW] - Negative correlation (peak hours 10-16)
 
 ## Data Sources
-- **Primary**: ENTSO-E Transparency Platform (requires API token)
+- **Primary**: Energy-Charts API (Fraunhofer ISE, no token required)
 - **Fallback**: SMARD.de (Bundesnetzagentur, no token required)
 
 ## Success Metrics

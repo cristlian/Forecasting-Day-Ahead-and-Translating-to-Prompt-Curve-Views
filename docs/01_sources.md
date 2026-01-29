@@ -3,34 +3,33 @@
 ## Primary Data Sources
 
 ### 1. Day-Ahead Prices
-**Source:** ENTSO-E Transparency Platform  
-**Endpoint:** Market Documents / Day-Ahead Prices  
+**Source:** Energy-Charts API (Fraunhofer ISE)  
+**Endpoint:** https://api.energy-charts.info/price  
 **Frequency:** Hourly  
-**Coverage:** 2020-present  
+**Coverage:** 2015-present  
 **Notes:**
-- Requires API registration (free)
-- Returns prices in local timezone with DST handling
-- Quality: High, authoritative source
+- No API key required
+- Delivered in UTC, easy to normalize
+- High-quality Germany/Luxembourg coverage
 
-### 2. Actual Load (Demand)
-**Source:** ENTSO-E Transparency Platform  
-**Endpoint:** Actual Total Load  
+### 2. Load (Forecast Proxy)
+**Source:** Energy-Charts API  
+**Endpoint:** https://api.energy-charts.info/total_power  
 **Frequency:** Hourly  
 **Notes:**
-- Real-time data with 1-hour lag
-- Need forecast load for forward-looking predictions
+- Provides actual load; used as a proxy for day-ahead forecast
+- Stable and reliable data quality
 
 ### 3. Wind Generation
-**Source:** ENTSO-E Transparency Platform  
-**Endpoint:** Actual Generation per Type (Wind Onshore + Offshore)  
+**Source:** Energy-Charts API  
+**Endpoint:** https://api.energy-charts.info/public_power  
 **Frequency:** Hourly  
 **Notes:**
-- Split by onshore/offshore in some markets
-- Aggregate for model simplicity
+- Aggregates wind onshore/offshore
 
 ### 4. Solar Generation
-**Source:** ENTSO-E Transparency Platform  
-**Endpoint:** Actual Generation per Type (Solar)  
+**Source:** Energy-Charts API  
+**Endpoint:** https://api.energy-charts.info/public_power  
 **Frequency:** Hourly  
 
 ### 5. Temperature (Optional)
@@ -39,7 +38,6 @@
 **Coverage:** Major cities in market zone  
 **Notes:**
 - Use as proxy for heating/cooling demand
-- Free tier sufficient for historical data
 
 ### 6. Fuel Prices (Optional Enhancement)
 **Source:** Manual collection or ICE/EEX data  
@@ -50,12 +48,9 @@
 - May need forward-fill for hourly model
 
 ## Alternative Sources (Fallback)
+- **SMARD.de (Bundesnetzagentur):** No API key required, Germany-specific
 - **Open Power System Data (OPSD):** Aggregated historical data
-- **Energy Charts (Fraunhofer ISE):** Germany-specific, high quality
-- **EIA (US markets):** If switching to US market analysis
 
 ## Data Access Notes
-- ENTSO-E requires free API token
-- Rate limits: 400 requests/minute
-- Historical data readily available
+- Energy-Charts and SMARD require no API key
 - Recommend caching raw downloads

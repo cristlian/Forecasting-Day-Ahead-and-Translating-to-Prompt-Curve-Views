@@ -1,6 +1,5 @@
 """Utility functions for data ingestion."""
 
-import os
 import time
 import logging
 import hashlib
@@ -63,18 +62,6 @@ def save_to_cache(df: pd.DataFrame, cache_path: Path) -> None:
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_parquet(cache_path)
     logger.info(f"Cached data to: {cache_path}")
-
-
-def get_entsoe_api_key() -> Optional[str]:
-    """Get ENTSO-E API key from environment."""
-    key = os.environ.get("ENTSOE_API_KEY")
-    if not key:
-        logger.warning(
-            "ENTSOE_API_KEY not set. Set it via: "
-            "export ENTSOE_API_KEY='your-key' (Linux/Mac) or "
-            "$env:ENTSOE_API_KEY='your-key' (PowerShell)"
-        )
-    return key
 
 
 def to_utc(df: pd.DataFrame, source_tz: str = "Europe/Berlin") -> pd.DataFrame:
@@ -149,32 +136,3 @@ def ensure_hourly_frequency(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-# ENTSO-E area codes for common markets
-ENTSOE_AREA_CODES = {
-    "DE_LU": "10Y1001A1001A82H",  # Germany-Luxembourg
-    "DE": "10Y1001A1001A83F",     # Germany (old, pre-Oct 2018)
-    "FR": "10YFR-RTE------C",     # France
-    "NL": "10YNL----------L",     # Netherlands  
-    "BE": "10YBE----------2",     # Belgium
-    "AT": "10YAT-APG------L",     # Austria
-    "CH": "10YCH-SWISSGRIDZ",     # Switzerland
-    "PL": "10YPL-AREA-----S",     # Poland
-    "ES": "10YES-REE------0",     # Spain
-    "IT_NORD": "10Y1001A1001A73I", # Italy North
-    "GB": "10YGB----------A",     # Great Britain
-}
-
-
-def get_area_code(market: str, config: dict = None) -> str:
-    """Get ENTSO-E area code for a market."""
-    # Check config first
-    if config and "market" in config:
-        code = config["market"].get("entsoe_area_code")
-        if code:
-            return code
-    
-    # Fallback to lookup
-    if market in ENTSOE_AREA_CODES:
-        return ENTSOE_AREA_CODES[market]
-    
-    raise ValueError(f"Unknown market code: {market}. Known codes: {list(ENTSOE_AREA_CODES.keys())}")

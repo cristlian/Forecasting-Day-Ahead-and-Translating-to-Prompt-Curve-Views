@@ -11,11 +11,9 @@ from .fundamentals import (
     FundamentalsIngestionError,
 )
 from .utils import (
-    get_entsoe_api_key,
     generate_run_id,
     to_utc,
     handle_dst,
-    ENTSOE_AREA_CODES,
 )
 
 __all__ = [
@@ -25,9 +23,7 @@ __all__ = [
     "normalize_fundamentals",
     "PriceIngestionError",
     "FundamentalsIngestionError",
-    "get_entsoe_api_key",
     "generate_run_id",
     "to_utc",
     "handle_dst",
-    "ENTSOE_AREA_CODES",
 ]

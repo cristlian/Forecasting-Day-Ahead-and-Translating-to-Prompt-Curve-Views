@@ -166,7 +166,7 @@ def _run_ingestion(
     force_refresh: bool = False,
 ) -> pd.DataFrame:
     """Run data ingestion step."""
-    from ..ingest import fetch_day_ahead_prices, fetch_fundamentals
+    from ingest import fetch_day_ahead_prices, fetch_fundamentals
     
     # Handle nested market config structure
     market_config = config["market"].get("market", config["market"])
@@ -223,7 +223,7 @@ def _run_qa_gate(
     run_id: str,
 ) -> Tuple[pd.DataFrame, bool]:
     """Run QA gate step."""
-    from ..qa import run_qa_pipeline, format_qa_summary_for_log
+    from qa import run_qa_pipeline, format_qa_summary_for_log
     
     qa_report_dir = paths.qa_report_dir()
     
@@ -256,7 +256,7 @@ def _run_feature_engineering(
     run_id: str,
 ) -> pd.DataFrame:
     """Run feature engineering step."""
-    from ..features import build_features, validate_no_leakage, get_feature_columns
+    from features import build_features, validate_no_leakage, get_feature_columns
     
     # Build features
     feature_dir = paths.feature_data_dir(run_id)
