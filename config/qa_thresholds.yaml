@@ -1,0 +1,25 @@
+# QA Thresholds
+# Defines pass/fail gates for data quality checks
+
+completeness:
+  max_missing_pct:
+    critical_columns: 1.0   # max 1% missing for price, load
+    optional_columns: 10.0   # max 10% for weather, fuel prices
+  
+duplicates:
+  max_duplicate_timestamps: 0  # no duplicates allowed
+  
+ranges:
+  fail_on_out_of_range: true
+  warn_threshold_pct: 0.1  # warn if >0.1% of data out of range
+  
+temporal:
+  max_gap_hours: 2  # fail if more than 2-hour gap in data
+  check_dst_transitions: true
+  
+outliers:
+  price_zscore_threshold: 10  # flag extreme price outliers
+  generation_zscore_threshold: 5
+  
+data_freshness:
+  max_delay_hours: 48  # fail if data is older than 48 hours (for live pipeline)

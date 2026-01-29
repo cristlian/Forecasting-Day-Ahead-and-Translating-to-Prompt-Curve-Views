@@ -1,0 +1,61 @@
+# Schema Contract
+# Defines strict column names, data types, units, and ranges
+
+columns:
+  timestamp:
+    dtype: "datetime64[ns]"
+    timezone_aware: true
+    required: true
+    
+  day_ahead_price:
+    dtype: "float64"
+    unit: "EUR/MWh"
+    range: [-500, 3000]  # theoretical bounds
+    required: true
+    
+  actual_load:
+    dtype: "float64"
+    unit: "MW"
+    range: [0, 100000]
+    required: true
+    
+  forecast_load:
+    dtype: "float64"
+    unit: "MW"
+    range: [0, 100000]
+    required: false
+    
+  wind_generation:
+    dtype: "float64"
+    unit: "MW"
+    range: [0, 70000]
+    required: true
+    
+  solar_generation:
+    dtype: "float64"
+    unit: "MW"
+    range: [0, 50000]
+    required: true
+    
+  temperature:
+    dtype: "float64"
+    unit: "celsius"
+    range: [-30, 50]
+    required: false
+    
+  gas_price:
+    dtype: "float64"
+    unit: "EUR/MWh"
+    range: [0, 500]
+    required: false
+    
+  coal_price:
+    dtype: "float64"
+    unit: "EUR/MWh"
+    range: [0, 300]
+    required: false
+
+# DST handling
+dst_policy:
+  spring_forward: "drop"  # drop the non-existent hour
+  fall_back: "average"     # average the duplicate hour

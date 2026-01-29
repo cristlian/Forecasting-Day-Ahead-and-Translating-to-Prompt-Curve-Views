@@ -1,0 +1,42 @@
+# Model Configuration
+# Hyperparameters and training settings
+
+baseline:
+  type: "naive_seasonal"
+  lag_hours: 168  # same hour last week
+  
+improved_model:
+  type: "lightgbm"  # or "xgboost"
+  
+  hyperparameters:
+    n_estimators: 500
+    learning_rate: 0.05
+    max_depth: 8
+    num_leaves: 64
+    min_child_samples: 20
+    subsample: 0.8
+    colsample_bytree: 0.8
+    reg_alpha: 0.1
+    reg_lambda: 1.0
+    random_state: 42
+    
+  early_stopping:
+    rounds: 50
+    metric: "mae"
+    
+cross_validation:
+  method: "rolling_origin"
+  n_splits: 10
+  train_size_days: 365
+  test_size_days: 7
+  gap_days: 0  # no gap between train and test
+  
+evaluation_metrics:
+  - mae
+  - rmse
+  - smape
+  - r2
+  
+feature_importance:
+  save: true
+  plot_top_n: 20

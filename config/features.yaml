@@ -1,0 +1,49 @@
+# Feature Engineering Configuration
+# Defines which features to build and their parameters
+
+feature_toggles:
+  enable_calendar: true
+  enable_lags: true
+  enable_rolling: true
+  enable_residual_load: true
+  enable_interactions: true
+  enable_fuel_spread: false  # if fuel prices unavailable
+
+calendar_features:
+  - hour
+  - day_of_week
+  - month
+  - is_weekend
+  - is_holiday
+  - season
+  
+lag_features:
+  columns:
+    - day_ahead_price
+    - actual_load
+    - wind_generation
+    - solar_generation
+  lags: [1, 2, 3, 24, 48, 168]  # hours
+  
+rolling_features:
+  columns:
+    - day_ahead_price
+    - actual_load
+    - residual_load
+  windows: [6, 24, 168]  # hours (6h, 1d, 1w)
+  aggregations:
+    - mean
+    - std
+    - min
+    - max
+    
+derived_features:
+  residual_load:
+    formula: "actual_load - wind_generation - solar_generation"
+  
+  renewable_share:
+    formula: "(wind_generation + solar_generation) / actual_load"
+    
+interaction_features:
+  - ["hour", "day_of_week"]
+  - ["residual_load", "hour"]

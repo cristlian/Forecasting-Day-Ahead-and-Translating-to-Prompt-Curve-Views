@@ -1,0 +1,25 @@
+# Market Configuration
+# Defines which power market to analyze and time parameters
+
+market:
+  code: "DE"  # Germany/Austria market (can be: DE, FR, NL, etc.)
+  name: "Germany/Austria"
+  timezone: "Europe/Berlin"
+  
+# Data date range
+date_range:
+  start: "2022-01-01"
+  end: "2024-12-31"
+  
+# Target variable
+target:
+  column: "day_ahead_price"
+  unit: "EUR/MWh"
+  frequency: "hourly"  # or "15min", "30min"
+  
+# Training/validation split
+split:
+  method: "rolling_origin"  # or "expanding_window"
+  train_days: 365
+  validation_days: 30
+  test_days: 7

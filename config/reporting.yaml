@@ -1,0 +1,39 @@
+# Reporting Configuration
+# Paths and templates for automated reports
+
+output_paths:
+  report_dir: "reports"
+  figures_dir: "reports/figures"
+  final_report: "report/report.md"
+  
+llm_settings:
+  enabled: false  # set to true if you have API keys
+  provider: "openai"  # or "anthropic"
+  model: "gpt-4"
+  max_tokens: 2000
+  temperature: 0.3
+  
+  prompt_template: "src/reporting/templates/daily_commentary.md.tpl"
+  
+  context_items:
+    - forecast_summary
+    - model_performance
+    - market_conditions
+    - key_drivers
+    - stress_test_results
+    
+report_sections:
+  - executive_summary
+  - methodology
+  - data_quality
+  - model_performance
+  - validation_results
+  - trading_signals
+  - conclusions
+  - appendix
+  
+figure_formats:
+  - png
+  - svg  # for high-quality report inclusion
+  
+dpi: 300
