@@ -307,9 +307,10 @@ def _call_gemini_agent(prompt: str, config: Dict, api_key: str) -> str:
         from google.genai import types
         
         client = genai.Client(api_key=api_key)
+        model_name = config.get("model", "gemini-2.5-flash")
         
         response = client.models.generate_content(
-            model=config.get("model", "gemini-2.5-flash"),
+            model=model_name,
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=SENIOR_TRADER_SYSTEM_PROMPT,
@@ -318,11 +319,54 @@ def _call_gemini_agent(prompt: str, config: Dict, api_key: str) -> str:
             )
         )
         
-        return response.text
+        result_text = response.text
+        
+        # Save LLM log
+        _save_llm_log(
+            provider="gemini",
+            model=model_name,
+            system_prompt=SENIOR_TRADER_SYSTEM_PROMPT,
+            user_prompt=prompt,
+            response=result_text,
+        )
+        
+        return result_text
         
     except Exception as e:
         logger.error(f"Gemini API error: {e}")
         raise
+
+
+def _save_llm_log(
+    provider: str,
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    response: str,
+) -> None:
+    """Save LLM prompt and response to logs directory."""
+    try:
+        log_dir = Path("reports/llm_logs")
+        log_dir.mkdir(parents=True, exist_ok=True)
+        
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        log_file = log_dir / f"llm_call_{timestamp}.json"
+        
+        log_data = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "provider": provider,
+            "model": model,
+            "system_prompt": system_prompt,
+            "user_prompt": user_prompt,
+            "response": response,
+        }
+        
+        with open(log_file, "w", encoding="utf-8") as f:
+            json.dump(log_data, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"LLM log saved to {log_file}")
+    except Exception as e:
+        logger.warning(f"Failed to save LLM log: {e}")
 
 
 def _call_openai_agent(prompt: str, config: Dict, api_key: str) -> str:
