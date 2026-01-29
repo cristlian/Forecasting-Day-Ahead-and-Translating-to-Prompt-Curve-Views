@@ -208,6 +208,41 @@ Environment Variables (OPTIONAL):
         help="Enable verbose (debug) logging"
     )
     
+    # Agent command (Step 9 - Morning Trading Signal)
+    agent_parser = subparsers.add_parser("agent", help="Generate morning trading signal (Step 9)")
+    agent_parser.add_argument(
+        "--no-llm",
+        action="store_true",
+        help="Use rule-based fallback instead of LLM"
+    )
+    agent_parser.add_argument(
+        "--cache-only",
+        action="store_true",
+        help="Only use cached features (fail if not available)"
+    )
+    agent_parser.add_argument(
+        "--use-sample",
+        action="store_true",
+        help="Use synthetic sample data (works without API keys)"
+    )
+    agent_parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="reports/trading",
+        help="Output directory for trading signals"
+    )
+    agent_parser.add_argument(
+        "--config-dir",
+        type=str,
+        default="config",
+        help="Path to configuration directory"
+    )
+    agent_parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Enable verbose (debug) logging"
+    )
+    
     args = parser.parse_args()
     
     if not args.command:
@@ -230,6 +265,9 @@ Environment Variables (OPTIONAL):
         
         elif args.command == "validate":
             return _handle_validate(args, logger)
+        
+        elif args.command == "agent":
+            return _handle_agent(args, logger)
         
         else:
             parser.print_help()
@@ -453,6 +491,126 @@ def _handle_validate(args, logger) -> int:
     except Exception as e:
         logger.error(f"Validation failed: {e}")
         return 1
+
+
+def _handle_agent(args, logger) -> int:
+    """Handle the 'agent' command (Step 9 - Morning Trading Signal)."""
+    from pathlib import Path
+    from .train import load_features, CacheMissingError
+    from .paths import PathBuilder, generate_run_id
+    try:
+        from ..trading.agent import generate_morning_signal
+        from ..trading.signals import generate_signals, generate_bucket_signals
+        from ..trading.prompt_translation import translate_to_prompt_buckets
+    except ImportError:
+        from trading.agent import generate_morning_signal
+        from trading.signals import generate_signals, generate_bucket_signals
+        from trading.prompt_translation import translate_to_prompt_buckets
+    import pandas as pd
+    
+    logger.info(f"Loading configuration from {args.config_dir}")
+    config = load_config(args.config_dir)
+    
+    # Optionally disable LLM
+    if args.no_llm:
+        logger.info("LLM disabled via --no-llm flag")
+        if "reporting" in config and "llm_settings" in config["reporting"]:
+            config["reporting"]["llm_settings"]["enabled"] = False
+    
+    # Market parameters (consistent with Step 8)
+    GAS_PRICE = 35.0
+    CARBON_PRICE = 50.0
+    HEAT_RATE = 2.0
+    CARBON_INTENSITY = 0.4
+    
+    paths = PathBuilder()
+    paths.ensure_dirs()
+    
+    # Try to load existing predictions first
+    preds_dir = paths.outputs / "preds_model"
+    pred_files = sorted(list(preds_dir.glob("*.csv")))
+    
+    if pred_files:
+        latest_pred = pred_files[-1]
+        logger.info(f"Loading predictions from {latest_pred.name}")
+        df = pd.read_csv(latest_pred)
+        df["timestamp"] = pd.to_datetime(df["timestamp"])
+        df.set_index("timestamp", inplace=True)
+        df.rename(columns={"predicted": "predicted_price", "actual": "actual_price"}, inplace=True)
+    else:
+        # Fall back to features
+        try:
+            df, source = load_features(
+                paths=paths,
+                cache_only=args.cache_only,
+                use_sample=args.use_sample,
+            )
+            logger.info(f"Loaded {len(df)} samples from {source}")
+            
+            target_col = config.get("market", {}).get("target", {}).get("column", "day_ahead_price")
+            if target_col in df.columns:
+                df["predicted_price"] = df[target_col]
+                df["actual_price"] = df[target_col]
+            else:
+                logger.error(f"Target column {target_col} not found in features")
+                return 1
+        except CacheMissingError as e:
+            logger.error(f"\n{e}")
+            logger.error("Run 'python -m pipeline train' first to generate predictions")
+            return 1
+    
+    # Use last 168 hours (1 week) for signal generation
+    forecast_df = df.tail(168).copy()
+    
+    logger.info(f"Forecast period: {forecast_df.index.min()} to {forecast_df.index.max()}")
+    logger.info(f"Hours: {len(forecast_df)}")
+    
+    # Generate signals
+    signals_df = generate_signals(
+        forecast_df,
+        threshold=10.0,
+        gas_price=GAS_PRICE,
+        carbon_price=CARBON_PRICE,
+        heat_rate=HEAT_RATE,
+        carbon_intensity=CARBON_INTENSITY,
+    )
+    
+    # Generate bucket view
+    bucket_view = translate_to_prompt_buckets(forecast_df)
+    bucket_signals = generate_bucket_signals(
+        bucket_view,
+        threshold=10.0,
+        gas_price=GAS_PRICE,
+        carbon_price=CARBON_PRICE,
+        heat_rate=HEAT_RATE,
+        carbon_intensity=CARBON_INTENSITY,
+    )
+    
+    # Set output directory
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    logger.info("-" * 60)
+    logger.info("🤖 TRADING AGENT: Morning Signal Generator")
+    logger.info("-" * 60)
+    
+    # Generate morning signal
+    result = generate_morning_signal(
+        signals_df=signals_df,
+        bucket_df=bucket_signals,
+        config=config,
+        output_dir=output_dir,
+    )
+    
+    # Print strategy
+    logger.info("-" * 60)
+    logger.info("📊 MORNING EXECUTION STRATEGY")
+    logger.info("-" * 60)
+    print("\n" + result["strategy"] + "\n")
+    
+    logger.info(f"✅ Signal saved to: {output_dir / 'LATEST_MORNING_SIGNAL.md'}")
+    
+    return 0
 
 
 def _print_result_summary(result: PipelineResult, logger):

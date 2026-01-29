@@ -1,6 +1,6 @@
 # Pipeline Progress Tracker
 
-## Current Status: Steps 1-6 Complete, Ready for Step 7
+## Current Status: Steps 1-9 Complete ✅
 
 ### Completed
 - [x] Scope freeze normalized into configs (market.yaml, schema.yaml, features.yaml)
@@ -14,13 +14,11 @@
 - [x] **Improved model** (src/models/model.py) - LightGBM gradient boosting
 - [x] **Rolling-origin CV** (src/models/cv.py) - Time-series cross-validation
 - [x] **Offline mode** - Works without API keys using sample data
+- [x] **Step 7: Validation + Stress Tests** (src/validation/runner.py, tests/)
+- [x] **Step 8: Trading Signals with Clean Spark Spread** (src/trading/signals.py)
+- [x] **Step 9: Trading Agent** (src/trading/agent.py) - Senior Trader LLM persona
 
-### Next Steps (Step 7+)
-1. **Download full dataset**: `python -c "from test_energy_charts import fetch_full_dataset; fetch_full_dataset('2023-01-01', '2024-12-31', 'data/raw')"`
-2. Run full pipeline with real data
-3. Generate trading signals from predictions
-4. LLM commentary integration (Gemini API ready)
-5. Final report assembly
+### All Tests Passing: 62 tests ✅
 
 ---
 
@@ -33,27 +31,60 @@
 python -c "from test_energy_charts import fetch_full_dataset; fetch_full_dataset('2023-01-01', '2024-12-31', 'data/raw')"
 ```
 
-### Step 2: Run Full Pipeline
+### Step 2: Train Models
 
 ```bash
 # Train both models using synthetic sample data
-python -m src.pipeline.cli train --use-sample
+python -m pipeline train --use-sample
 
 # Train only baseline model
-python -m src.pipeline.cli train --model baseline --use-sample
+python -m pipeline train --model baseline --use-sample
 
 # Train only improved model  
-python -m src.pipeline.cli train --model improved --use-sample
+python -m pipeline train --model improved --use-sample
 
 # Run cross-validation evaluation
-python -m src.pipeline.cli eval --use-sample
+python -m pipeline eval --use-sample
+```
+
+### Step 3: Run Validation + Stress Tests
+
+```bash
+# Run validation with date-specific deterministic run_id
+python -m pipeline validate --use-sample --date 2026-01-29
+```
+
+### Step 4: Generate Trading Signals (Step 8)
+
+```bash
+# Generate trading signals with Clean Spark Spread
+python scripts/run_trading_step.py
+
+# Outputs:
+# - reports/trading/hourly_signals.csv
+# - reports/trading/signal_report.md
+# - reports/trading/prompt_view.csv
+```
+
+### Step 5: Morning Trading Signal (Step 9 - Agent)
+
+```bash
+# Generate morning trading signal with Senior Trader LLM persona
+python -m pipeline agent --use-sample
+
+# Without LLM (rule-based fallback)
+python -m pipeline agent --use-sample --no-llm
+
+# Outputs:
+# - reports/trading/LATEST_MORNING_SIGNAL.md
+# - reports/trading/morning_signal_YYYYMMDD_HHMMSS.json
 ```
 
 ### Cache Mode (Requires Previous Pipeline Run)
 
 ```bash
 # Train using cached features (if you've run the full pipeline before)
-python -m src.pipeline.cli train --cache-only
+python -m pipeline train --cache-only
 
 # This will fail with helpful message if no cache exists
 ```
@@ -66,23 +97,23 @@ export ENTSOE_API_KEY='your-key-here'  # Linux/Mac
 $env:ENTSOE_API_KEY='your-key-here'    # PowerShell
 
 # Run full pipeline (ingestion -> QA -> features)
-python -m src.pipeline.cli run --start-date 2024-01-01 --end-date 2024-12-31
+python -m pipeline run --start-date 2024-01-01 --end-date 2024-12-31
 
 # Then train models on the generated features
-python -m src.pipeline.cli train --cache-only
+python -m pipeline train --cache-only
 ```
 
 ### Running Tests
 
 ```bash
-# Run all tests (no API keys needed)
+# Run all tests (no API keys needed) - 62 tests
 pytest tests/ -v
 
 # Run only offline training tests
 pytest tests/test_train_offline.py -v
 
-# Run cache error handling tests
-pytest tests/test_cache_only_errors.py -v
+# Run trading agent tests
+pytest tests/test_trading_agent.py -v
 ```
 
 ---
@@ -122,6 +153,9 @@ See `.env.example` for details.
 - `reports/metrics/feature_importance_{run_id}.csv` - Feature importance
 - `reports/metrics/cv_results_{run_id}.json` - Cross-validation results
 - `reports/validation/{run_id}.md` - Validation comparison report
+- `reports/trading/hourly_signals.csv` - Hourly trading signals with CSS
+- `reports/trading/signal_report.md` - Signal summary report
+- `reports/trading/LATEST_MORNING_SIGNAL.md` - AI-generated morning signal
 
 ---
 

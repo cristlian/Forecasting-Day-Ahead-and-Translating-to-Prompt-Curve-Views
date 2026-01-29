@@ -32,10 +32,16 @@ def translate_to_prompt_buckets(
     forecasts["bucket"] = forecasts.index.map(_assign_bucket)
     
     # Aggregate by bucket
-    bucket_forecasts = forecasts.groupby("bucket").agg({
-        "predicted_price": "mean",
-        "actual_price": "mean",  # if available
-    }).reset_index()
+    agg_dict = {"predicted_price": "mean"}
+    if "actual_price" in forecasts.columns:
+        agg_dict["actual_price"] = "mean"
+    elif "actual" in forecasts.columns:
+         # Handle case where column is named 'actual' but we want to map it
+         # But usually we should rename before calling. 
+         # Let's just stick to checking 'actual_price' and the user should ensure it matches
+         pass
+
+    bucket_forecasts = forecasts.groupby("bucket").agg(agg_dict).reset_index()
     
     return bucket_forecasts
 
