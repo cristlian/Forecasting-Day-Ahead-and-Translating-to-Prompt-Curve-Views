@@ -1,7 +1,7 @@
 # Power Price Forecasting Case Study
 
-**Name:** [Your Name]  
-**Email:** [your.email@example.com]
+**Name:** Yifei Lian  
+**Email:** yifeicristlian@outlook.com
 
 ---
 
