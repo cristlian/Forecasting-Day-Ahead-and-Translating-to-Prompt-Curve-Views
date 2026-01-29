@@ -33,6 +33,7 @@ def setup_logging(verbose: bool = False):
     # Reduce noise from external libraries
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("requests").setLevel(logging.WARNING)
+    logging.getLogger("lightgbm").setLevel(logging.WARNING)
 
 
 def main():
@@ -42,24 +43,31 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Run pipeline for specific date range
+  # Run full pipeline (ingestion -> QA -> features) - requires API key or cache
   python -m src.pipeline.cli run --start-date 2024-01-01 --end-date 2024-01-31
 
-  # Run with verbose logging
-  python -m src.pipeline.cli run --start-date 2024-01-01 --end-date 2024-01-31 -v
+  # Train models using cached features (no API key needed)
+  python -m src.pipeline.cli train --cache-only
 
-  # Force refresh (bypass cache)
-  python -m src.pipeline.cli run --start-date 2024-01-01 --end-date 2024-01-31 --force-refresh
+  # Train models using sample data (no API key needed, works on fresh clone)
+  python -m src.pipeline.cli train --use-sample
 
-Environment Variables:
+  # Train only baseline model
+  python -m src.pipeline.cli train --model baseline --use-sample
+
+  # Evaluate models
+  python -m src.pipeline.cli eval --use-sample
+
+Environment Variables (OPTIONAL):
   ENTSOE_API_KEY    API key for ENTSO-E Transparency Platform
                     Get your key at: https://transparency.entsoe.eu/
+                    NOT required for --cache-only or --use-sample modes
         """
     )
     
     subparsers = parser.add_subparsers(dest="command", help="Command to execute")
     
-    # Run command
+    # Run command (full pipeline)
     run_parser = subparsers.add_parser("run", help="Run the data pipeline (Steps 2-4)")
     run_parser.add_argument(
         "--start-date",
@@ -90,6 +98,73 @@ Environment Variables:
         help="Bypass cache and re-fetch all data"
     )
     run_parser.add_argument(
+        "--skip-ingest",
+        action="store_true",
+        help="Skip ingestion step (use existing cached data)"
+    )
+    run_parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Enable verbose (debug) logging"
+    )
+    
+    # Train command
+    train_parser = subparsers.add_parser("train", help="Train models (Steps 5-6)")
+    train_parser.add_argument(
+        "--model",
+        type=str,
+        choices=["baseline", "improved", "both"],
+        default="both",
+        help="Which model to train (default: both)"
+    )
+    train_parser.add_argument(
+        "--cache-only",
+        action="store_true",
+        help="Only use cached features (fail if not available)"
+    )
+    train_parser.add_argument(
+        "--use-sample",
+        action="store_true",
+        help="Use synthetic sample data (works without API keys)"
+    )
+    train_parser.add_argument(
+        "--config-dir",
+        type=str,
+        default="config",
+        help="Path to configuration directory"
+    )
+    train_parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Enable verbose (debug) logging"
+    )
+    
+    # Eval command  
+    eval_parser = subparsers.add_parser("eval", help="Evaluate models with cross-validation")
+    eval_parser.add_argument(
+        "--model",
+        type=str,
+        choices=["baseline", "improved", "both"],
+        default="both",
+        help="Which model to evaluate (default: both)"
+    )
+    eval_parser.add_argument(
+        "--cache-only",
+        action="store_true",
+        help="Only use cached features"
+    )
+    eval_parser.add_argument(
+        "--use-sample",
+        action="store_true",
+        help="Use synthetic sample data"
+    )
+    eval_parser.add_argument(
+        "--config-dir",
+        type=str,
+        default="config",
+        help="Path to configuration directory"
+    )
+    eval_parser.add_argument(
         "-v", "--verbose",
         action="store_true",
         help="Enable verbose (debug) logging"
@@ -117,6 +192,12 @@ Environment Variables:
     try:
         if args.command == "run":
             return _handle_run(args, logger)
+        
+        elif args.command == "train":
+            return _handle_train(args, logger)
+        
+        elif args.command == "eval":
+            return _handle_eval(args, logger)
         
         elif args.command == "validate":
             return _handle_validate(args, logger)
@@ -157,18 +238,21 @@ def _handle_run(args, logger) -> int:
     logger.info(f"Loading configuration from {args.config_dir}")
     config = load_config(args.config_dir)
     
-    market = config.get("market", {}).get("code", "unknown")
+    market = config.get("market", {}).get("market", {}).get("code", "unknown")
     logger.info(f"Market: {market}")
     
     # Check for API key
     import os
     api_key = os.environ.get("ENTSOE_API_KEY")
-    if not api_key:
+    if not api_key and not args.skip_ingest:
         logger.warning(
             "⚠️  ENTSOE_API_KEY not set. Will attempt to use cached data or SMARD fallback."
         )
         logger.warning(
             "   Get your API key at: https://transparency.entsoe.eu/"
+        )
+        logger.warning(
+            "   Or use --skip-ingest if you have cached data."
         )
     
     # Run pipeline
@@ -184,6 +268,121 @@ def _handle_run(args, logger) -> int:
     _print_result_summary(result, logger)
     
     return 0 if result.success else 1
+
+
+def _handle_train(args, logger) -> int:
+    """Handle the 'train' command."""
+    from .train import run_training, CacheMissingError
+    
+    logger.info(f"Loading configuration from {args.config_dir}")
+    config = load_config(args.config_dir)
+    
+    try:
+        results = run_training(
+            config=config,
+            model_type=args.model,
+            cache_only=args.cache_only,
+            use_sample=args.use_sample,
+        )
+        
+        # Check if all succeeded
+        all_success = all(r.success for r in results.values())
+        return 0 if all_success else 1
+        
+    except CacheMissingError as e:
+        logger.error(f"\n{e}")
+        return 1
+
+
+def _handle_eval(args, logger) -> int:
+    """Handle the 'eval' command with cross-validation."""
+    from .train import load_features, CacheMissingError
+    from .paths import PathBuilder, generate_run_id
+    from ..models.cv import RollingOriginCV
+    from ..models.baseline import NaiveSeasonalModel
+    from ..models.model import PowerPriceModel
+    from ..validation.metrics import calculate_metrics
+    import json
+    
+    logger.info(f"Loading configuration from {args.config_dir}")
+    config = load_config(args.config_dir)
+    
+    paths = PathBuilder()
+    paths.ensure_dirs()
+    
+    try:
+        df_features, source = load_features(
+            paths=paths,
+            cache_only=args.cache_only,
+            use_sample=args.use_sample,
+        )
+        logger.info(f"Loaded {len(df_features)} samples from {source}")
+    except CacheMissingError as e:
+        logger.error(f"\n{e}")
+        return 1
+    
+    target_col = config.get("market", {}).get("target", {}).get("column", "day_ahead_price")
+    cv_config = config.get("model", {}).get("cross_validation", {})
+    
+    # Setup CV
+    cv = RollingOriginCV(
+        train_size_days=cv_config.get("train_size_days", 30),
+        test_size_days=cv_config.get("test_size_days", 7),
+        gap_days=cv_config.get("gap_days", 0),
+        n_splits=min(cv_config.get("n_splits", 5), 3),  # Limit splits for sample data
+    )
+    
+    market = config.get("market", {}).get("market", {}).get("code", "DE_LU")
+    run_id = generate_run_id(market)
+    
+    results = {}
+    
+    if args.model in ["baseline", "both"]:
+        logger.info("\n" + "="*60)
+        logger.info("CROSS-VALIDATION: BASELINE MODEL")
+        logger.info("="*60)
+        
+        cv_results = cv.evaluate(
+            df=df_features,
+            model_class=lambda cfg: NaiveSeasonalModel(config=cfg),
+            config=config,
+            target_col=target_col,
+        )
+        results["baseline"] = cv_results
+        logger.info(f"Baseline CV metrics: {cv_results['mean_metrics']}")
+    
+    if args.model in ["improved", "both"]:
+        logger.info("\n" + "="*60)
+        logger.info("CROSS-VALIDATION: IMPROVED MODEL")
+        logger.info("="*60)
+        
+        cv_results = cv.evaluate(
+            df=df_features,
+            model_class=PowerPriceModel,
+            config=config,
+            target_col=target_col,
+        )
+        results["improved"] = cv_results
+        logger.info(f"Improved model CV metrics: {cv_results['mean_metrics']}")
+    
+    # Save CV results
+    cv_results_path = paths.metrics_report(f"cv_results_{run_id}.json")
+    cv_results_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    # Convert to serializable format
+    serializable = {}
+    for model_name, model_results in results.items():
+        serializable[model_name] = {
+            "mean_metrics": model_results["mean_metrics"],
+            "split_metrics": model_results["split_metrics"],
+        }
+    
+    with open(cv_results_path, 'w') as f:
+        json.dump(serializable, f, indent=2)
+    
+    logger.info(f"\nCV results saved to {cv_results_path}")
+    
+    return 0
 
 
 def _handle_validate(args, logger) -> int:

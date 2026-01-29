@@ -35,10 +35,10 @@ ENV/
 # Environment variables
 .env
 
-# Data directories
-data/
-outputs/
-models/
+# Data directories (at project root, not src/)
+/data/
+/outputs/
+/models/
 reports/qa/
 reports/metrics/
 reports/validation/
